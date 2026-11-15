@@ -1,0 +1,53 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    send_batch_size: 256
+    timeout: 500ms
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    send_timestamps: true
+    metric_expiration: 30m
+    resource_to_telemetry_conversion:
+      enabled: true
+  file/traces:
+    path: /var/log/otel/traces.json
+    flush_interval: 500ms
+  file/metrics:
+    path: /var/log/otel/metrics.json
+    flush_interval: 500ms
+  file/logs:
+    path: /var/log/otel/logs.json
+    flush_interval: 500ms
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger, file/traces]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus, file/metrics]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [file/logs]

@@ -1,0 +1,26 @@
+server:
+  port: ${SERVER_PORT:8083}
+  shutdown: graceful
+
+spring:
+  application:
+    name: merchant-service
+  lifecycle:
+    timeout-per-shutdown-phase: 15s
+
+commerce:
+  scenario:
+    name: ${SCENARIO_NAME:NORMAL}
+    enabled: ${SCENARIO_ENABLED:false}
+    merchant-timeout-ms: ${MERCHANT_TIMEOUT_MS:1500}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never

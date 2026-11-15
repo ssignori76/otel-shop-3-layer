@@ -1,0 +1,281 @@
+name: commerce-synthetic
+
+services:
+  mysql:
+    image: mysql:8.4.3
+    container_name: commerce-mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_local_dev_only}
+      MYSQL_CART_USER: ${MYSQL_CART_USER:-cart_app}
+      MYSQL_CART_PASSWORD: ${MYSQL_CART_PASSWORD:-cart_local_dev_only}
+      MYSQL_CHECKOUT_USER: ${MYSQL_CHECKOUT_USER:-checkout_app}
+      MYSQL_CHECKOUT_PASSWORD: ${MYSQL_CHECKOUT_PASSWORD:-checkout_local_dev_only}
+      MYSQL_FULFILLMENT_USER: ${MYSQL_FULFILLMENT_USER:-fulfillment_app}
+      MYSQL_FULFILLMENT_PASSWORD: ${MYSQL_FULFILLMENT_PASSWORD:-fulfillment_local_dev_only}
+      TZ: UTC
+    volumes:
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+      - mysql_data:/var/lib/mysql
+    networks:
+      - commerce-net
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -u$${MYSQL_CART_USER} -p$${MYSQL_CART_PASSWORD} -e 'SELECT 1' cart_db >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  rabbitmq:
+    image: rabbitmq:3.13.7-management-alpine
+    container_name: commerce-rabbitmq
+    volumes:
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - commerce-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  cart-service:
+    image: ${IMAGE_REGISTRY:-commerce}/cart-service:${APP_VERSION:-1.0.0}
+    build:
+      context: .
+      dockerfile: docker/java-service/Dockerfile
+      args:
+        MODULE_PATH: services/cart-service
+        APP_NAME: cart-service
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+        SERVER_PORT: 8081
+    container_name: commerce-cart-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8081
+      CART_DB_URL: jdbc:mysql://mysql:3306/cart_db?serverTimezone=UTC&characterEncoding=utf8
+      MYSQL_CART_USER: ${MYSQL_CART_USER:-cart_app}
+      MYSQL_CART_PASSWORD: ${MYSQL_CART_PASSWORD:-cart_local_dev_only}
+      SCENARIO_NAME: ${SCENARIO_NAME:-NORMAL}
+      SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
+      OTEL_SERVICE_NAME: cart-service
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+    networks:
+      - commerce-net
+
+  merchant-service:
+    image: ${IMAGE_REGISTRY:-commerce}/merchant-service:${APP_VERSION:-1.0.0}
+    build:
+      context: .
+      dockerfile: docker/java-service/Dockerfile
+      args:
+        MODULE_PATH: services/merchant-service
+        APP_NAME: merchant-service
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+        SERVER_PORT: 8083
+    container_name: commerce-merchant-service
+    environment:
+      SERVER_PORT: 8083
+      SCENARIO_NAME: ${SCENARIO_NAME:-NORMAL}
+      SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
+      MERCHANT_TIMEOUT_MS: ${MERCHANT_TIMEOUT_MS:-1500}
+      OTEL_SERVICE_NAME: merchant-service
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+    networks:
+      - commerce-net
+
+  checkout-service:
+    image: ${IMAGE_REGISTRY:-commerce}/checkout-service:${APP_VERSION:-1.0.0}
+    build:
+      context: .
+      dockerfile: docker/java-service/Dockerfile
+      args:
+        MODULE_PATH: services/checkout-service
+        APP_NAME: checkout-service
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+        SERVER_PORT: 8082
+    container_name: commerce-checkout-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      merchant-service:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8082
+      CHECKOUT_DB_URL: jdbc:mysql://mysql:3306/checkout_db?serverTimezone=UTC&characterEncoding=utf8
+      MYSQL_CHECKOUT_USER: ${MYSQL_CHECKOUT_USER:-checkout_app}
+      MYSQL_CHECKOUT_PASSWORD: ${MYSQL_CHECKOUT_PASSWORD:-checkout_local_dev_only}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-commerce_app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-rabbit_local_dev_only}
+      MERCHANT_SERVICE_URL: http://merchant-service:8083
+      SCENARIO_NAME: ${SCENARIO_NAME:-NORMAL}
+      SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
+      DB_SLOW_DURATION_MS: ${DB_SLOW_DURATION_MS:-1500}
+      DB_OPERATION_TIMEOUT_MS: ${DB_OPERATION_TIMEOUT_MS:-1000}
+      MERCHANT_TIMEOUT_MS: ${MERCHANT_TIMEOUT_MS:-1500}
+      BROKER_PUBLISH_TIMEOUT_MS: ${BROKER_PUBLISH_TIMEOUT_MS:-1500}
+      OTEL_SERVICE_NAME: checkout-service
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+    networks:
+      - commerce-net
+
+  fulfillment-service:
+    image: ${IMAGE_REGISTRY:-commerce}/fulfillment-service:${APP_VERSION:-1.0.0}
+    build:
+      context: .
+      dockerfile: docker/java-service/Dockerfile
+      args:
+        MODULE_PATH: services/fulfillment-service
+        APP_NAME: fulfillment-service
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+        SERVER_PORT: 8084
+    container_name: commerce-fulfillment-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8084
+      FULFILLMENT_DB_URL: jdbc:mysql://mysql:3306/fulfillment_db?serverTimezone=UTC&characterEncoding=utf8
+      MYSQL_FULFILLMENT_USER: ${MYSQL_FULFILLMENT_USER:-fulfillment_app}
+      MYSQL_FULFILLMENT_PASSWORD: ${MYSQL_FULFILLMENT_PASSWORD:-fulfillment_local_dev_only}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-commerce_app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-rabbit_local_dev_only}
+      SCENARIO_NAME: ${SCENARIO_NAME:-NORMAL}
+      SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
+      FULFILLMENT_ERROR_AFTER_MS: ${FULFILLMENT_ERROR_AFTER_MS:-100}
+      OTEL_SERVICE_NAME: fulfillment-service
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+    networks:
+      - commerce-net
+
+  api-gateway:
+    image: ${IMAGE_REGISTRY:-commerce}/api-gateway:${APP_VERSION:-1.0.0}
+    build:
+      context: .
+      dockerfile: docker/java-service/Dockerfile
+      args:
+        MODULE_PATH: services/api-gateway
+        APP_NAME: api-gateway
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+        SERVER_PORT: 8080
+    container_name: commerce-api-gateway
+    depends_on:
+      cart-service:
+        condition: service_healthy
+      checkout-service:
+        condition: service_healthy
+      fulfillment-service:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8080
+      CART_SERVICE_URL: http://cart-service:8081
+      CHECKOUT_SERVICE_URL: http://checkout-service:8082
+      SCENARIO_NAME: ${SCENARIO_NAME:-NORMAL}
+      SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
+      OTEL_SERVICE_NAME: api-gateway
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+    networks:
+      - commerce-net
+
+  apache-web:
+    image: ${IMAGE_REGISTRY:-commerce}/apache-web:${APP_VERSION:-1.0.0}
+    build:
+      context: .
+      dockerfile: docker/apache/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+    container_name: commerce-apache-web
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    ports:
+      - "${APACHE_HOST_PORT:-18080}:80"
+    networks:
+      - commerce-net
+
+  journey-generator:
+    image: ${IMAGE_REGISTRY:-commerce}/journey-generator:${APP_VERSION:-1.0.0}
+    build:
+      context: .
+      dockerfile: docker/java-service/Dockerfile
+      args:
+        MODULE_PATH: journey-generator
+        APP_NAME: journey-generator
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+        SERVER_PORT: 8085
+    container_name: commerce-journey-generator
+    depends_on:
+      apache-web:
+        condition: service_healthy
+      fulfillment-service:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8085
+      GENERATOR_ENABLED: ${GENERATOR_ENABLED:-true}
+      GENERATOR_INTERVAL_SECONDS: ${GENERATOR_INTERVAL_SECONDS:-10}
+      GENERATOR_INITIAL_DELAY_SECONDS: ${GENERATOR_INITIAL_DELAY_SECONDS:-5}
+      GENERATOR_MAX_IN_FLIGHT: ${GENERATOR_MAX_IN_FLIGHT:-1}
+      GENERATOR_REQUEST_TIMEOUT_SECONDS: ${GENERATOR_REQUEST_TIMEOUT_SECONDS:-30}
+      GENERATOR_MAX_JOURNEYS: ${GENERATOR_MAX_JOURNEYS:-0}
+      GENERATOR_STOP_ON_UNEXPECTED_ERROR: ${GENERATOR_STOP_ON_UNEXPECTED_ERROR:-false}
+      GENERATOR_TARGET_URL: http://apache-web:80
+      SCENARIO_NAME: ${SCENARIO_NAME:-NORMAL}
+      SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
+      OTEL_SERVICE_NAME: journey-generator
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+    networks:
+      - commerce-net
+
+networks:
+  commerce-net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  rabbitmq_data:

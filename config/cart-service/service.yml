@@ -1,0 +1,3 @@
+# Cart Service Reference Configuration
+server:
+  port: 8081

@@ -1,0 +1,33 @@
+server:
+  port: ${SERVER_PORT:8085}
+  shutdown: graceful
+
+spring:
+  application:
+    name: journey-generator
+  lifecycle:
+    timeout-per-shutdown-phase: 15s
+
+commerce:
+  generator:
+    enabled: ${GENERATOR_ENABLED:true}
+    interval-seconds: ${GENERATOR_INTERVAL_SECONDS:10}
+    initial-delay-seconds: ${GENERATOR_INITIAL_DELAY_SECONDS:5}
+    max-in-flight: ${GENERATOR_MAX_IN_FLIGHT:1}
+    request-timeout-seconds: ${GENERATOR_REQUEST_TIMEOUT_SECONDS:30}
+    max-journeys: ${GENERATOR_MAX_JOURNEYS:0}
+    stop-on-unexpected-error: ${GENERATOR_STOP_ON_UNEXPECTED_ERROR:false}
+    target-base-url: ${GENERATOR_TARGET_URL:http://apache-web:80}
+    scenario-name: ${SCENARIO_NAME:NORMAL}
+    scenario-enabled: ${SCENARIO_ENABLED:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never

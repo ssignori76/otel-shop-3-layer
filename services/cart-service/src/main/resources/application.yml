@@ -1,0 +1,44 @@
+server:
+  port: ${SERVER_PORT:8081}
+  shutdown: graceful
+
+spring:
+  application:
+    name: cart-service
+  lifecycle:
+    timeout-per-shutdown-phase: 15s
+  datasource:
+    url: ${CART_DB_URL:jdbc:mysql://mysql:3306/cart_db?serverTimezone=UTC&characterEncoding=utf8}
+    username: ${MYSQL_CART_USER:cart_app}
+    password: ${MYSQL_CART_PASSWORD:cart_local_dev_only}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: cart-hikari-pool
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 3000
+      validation-timeout: 2000
+      connection-test-query: SELECT 1
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+
+commerce:
+  scenario:
+    name: ${SCENARIO_NAME:NORMAL}
+    enabled: ${SCENARIO_ENABLED:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    db:
+      enabled: true

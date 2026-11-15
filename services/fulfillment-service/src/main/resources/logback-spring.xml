@@ -1,0 +1,11 @@
+<configuration>
+    <springProperty scope="context" name="serviceName" source="spring.application.name" defaultValue="fulfillment-service"/>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>{"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z',UTC}","severity":"%level","service":"${serviceName}","logger":"%logger{36}","thread":"%thread","trace_id":"%X{trace_id:-}","span_id":"%X{span_id:-}","run_id":"%X{run_id:-}","journey_id":"%X{journey_id:-}","scenario":"%X{scenario:-}","scenario_enabled":"%X{scenario_enabled:-}","journey_state":"%X{journey_state:-}","cart_id":"%X{cart_id:-}","order_id":"%X{order_id:-}","fulfillment_id":"%X{fulfillment_id:-}","error_code":"%X{error_code:-}","message":"%replace(%msg){'\"','\\\"'}"}%n</pattern>
+        </encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

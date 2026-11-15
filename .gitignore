@@ -1,0 +1,34 @@
+# Build and Maven outputs
+target/
+*.jar
+*.war
+*.ear
+.mvn/
+!.mvn/wrapper/
+
+# Local environment and secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Container and runtime data
+data/
+mysql-data/
+rabbitmq-data/
+jaeger-data/
+otel-data/
+test/reports/*.json
+test/reports/*.txt
+test/reports/*.xml
+!test/reports/.gitkeep
+
+# IDE and OS files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Timestamped backups (per safety rule)
+*.[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]

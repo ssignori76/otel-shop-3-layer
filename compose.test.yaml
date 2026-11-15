@@ -1,0 +1,180 @@
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: commerce-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "${JAEGER_UI_HOST_PORT:-16686}:16686"
+    networks:
+      - commerce-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:14269/"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+  otel-collector:
+    image: ${IMAGE_REGISTRY:-commerce}/otel-collector:${APP_VERSION:-1.0.0}
+    build:
+      context: .
+      dockerfile: docker/otel-collector/Dockerfile
+    container_name: commerce-otel-collector
+    depends_on:
+      jaeger:
+        condition: service_healthy
+    volumes:
+      - ./observability/otel-collector/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - otel_telemetry_data:/var/log/otel
+    networks:
+      - commerce-net
+
+  cart-service:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_METRIC_EXPORT_INTERVAL: 2000
+
+  merchant-service:
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_METRIC_EXPORT_INTERVAL: 2000
+
+  checkout-service:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      merchant-service:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_METRIC_EXPORT_INTERVAL: 2000
+
+  fulfillment-service:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_METRIC_EXPORT_INTERVAL: 2000
+
+  api-gateway:
+    depends_on:
+      cart-service:
+        condition: service_healthy
+      checkout-service:
+        condition: service_healthy
+      fulfillment-service:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_METRIC_EXPORT_INTERVAL: 2000
+
+  journey-generator:
+    depends_on:
+      apache-web:
+        condition: service_healthy
+      fulfillment-service:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_METRIC_EXPORT_INTERVAL: 2000
+
+  test-runner:
+    image: ${IMAGE_REGISTRY:-commerce}/test-runner:${APP_VERSION:-1.0.0}
+    build:
+      context: .
+      dockerfile: test/Dockerfile
+    container_name: commerce-test-runner
+    profiles:
+      - e2e
+    depends_on:
+      apache-web:
+        condition: service_healthy
+      journey-generator:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    environment:
+      APACHE_URL: http://apache-web:80
+      GATEWAY_URL: http://api-gateway:8080
+      GENERATOR_URL: http://journey-generator:8085
+      JAEGER_URL: http://jaeger:16686
+      OTEL_PROMETHEUS_URL: http://otel-collector:8889/metrics
+      OTEL_EXPORT_DIR: /var/log/otel
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_CART_USER: ${MYSQL_CART_USER:-cart_app}
+      MYSQL_CART_PASSWORD: ${MYSQL_CART_PASSWORD:-cart_local_dev_only}
+      MYSQL_CHECKOUT_USER: ${MYSQL_CHECKOUT_USER:-checkout_app}
+      MYSQL_CHECKOUT_PASSWORD: ${MYSQL_CHECKOUT_PASSWORD:-checkout_local_dev_only}
+      MYSQL_FULFILLMENT_USER: ${MYSQL_FULFILLMENT_USER:-fulfillment_app}
+      MYSQL_FULFILLMENT_PASSWORD: ${MYSQL_FULFILLMENT_PASSWORD:-fulfillment_local_dev_only}
+      RABBITMQ_API_URL: http://rabbitmq:15672/api
+      RABBITMQ_USER: ${RABBITMQ_USER:-commerce_app}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-rabbit_local_dev_only}
+      REPORT_DIR: /reports
+      NORMAL_STABILITY_COUNT: ${NORMAL_STABILITY_COUNT:-30}
+      SCENARIO_REPEAT_COUNT: ${SCENARIO_REPEAT_COUNT:-3}
+    volumes:
+      - otel_telemetry_data:/var/log/otel:ro
+      - ./test/reports:/reports
+    networks:
+      - commerce-net
+
+volumes:
+  otel_telemetry_data:

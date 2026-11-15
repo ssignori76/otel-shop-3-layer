@@ -1,0 +1,63 @@
+{
+  "scenarios": [
+    {
+      "name": "NORMAL",
+      "enabled": false,
+      "expected_http_status": 202,
+      "expected_order_status": "PUBLISHED",
+      "expected_fulfillment_status": "FULFILLED"
+    },
+    {
+      "name": "DB_SLOW",
+      "enabled": true,
+      "expected_http_status": 202,
+      "expected_order_status": "PUBLISHED",
+      "expected_fulfillment_status": "FULFILLED",
+      "min_duration_ms": 1400
+    },
+    {
+      "name": "BE_ERROR",
+      "enabled": true,
+      "expected_http_status": 500,
+      "expected_error_code": "BE_ERROR",
+      "expected_order_status": null,
+      "expected_fulfillment_status": null,
+      "absent_services": ["merchant-service", "fulfillment-service"]
+    },
+    {
+      "name": "DB_TIMEOUT",
+      "enabled": true,
+      "expected_http_status": 504,
+      "expected_error_code": "DB_TIMEOUT",
+      "expected_order_status": null,
+      "expected_fulfillment_status": null,
+      "absent_services": ["merchant-service", "fulfillment-service"]
+    },
+    {
+      "name": "MERCHANT_TIMEOUT",
+      "enabled": true,
+      "expected_http_status": 504,
+      "expected_error_code": "MERCHANT_TIMEOUT",
+      "expected_order_status": null,
+      "expected_fulfillment_status": null,
+      "absent_services": ["fulfillment-service"]
+    },
+    {
+      "name": "BROKER_UNAVAILABLE",
+      "enabled": true,
+      "expected_http_status": 503,
+      "expected_error_code": "BROKER_UNAVAILABLE",
+      "expected_order_status": "PAYMENT_AUTHORIZED_NOT_PUBLISHED",
+      "expected_fulfillment_status": null,
+      "absent_services": ["fulfillment-service"]
+    },
+    {
+      "name": "FULFILLMENT_ERROR",
+      "enabled": true,
+      "expected_http_status": 202,
+      "expected_order_status": "PUBLISHED",
+      "expected_fulfillment_status": null,
+      "expect_dlq_increment": true
+    }
+  ]
+}

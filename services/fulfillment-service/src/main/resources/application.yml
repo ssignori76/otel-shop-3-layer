@@ -1,0 +1,57 @@
+server:
+  port: ${SERVER_PORT:8084}
+  shutdown: graceful
+
+spring:
+  application:
+    name: fulfillment-service
+  lifecycle:
+    timeout-per-shutdown-phase: 15s
+  datasource:
+    url: ${FULFILLMENT_DB_URL:jdbc:mysql://mysql:3306/fulfillment_db?serverTimezone=UTC&characterEncoding=utf8}
+    username: ${MYSQL_FULFILLMENT_USER:fulfillment_app}
+    password: ${MYSQL_FULFILLMENT_PASSWORD:fulfillment_local_dev_only}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: fulfillment-hikari-pool
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 3000
+      validation-timeout: 2000
+      connection-test-query: SELECT 1
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:commerce_app}
+    password: ${RABBITMQ_PASSWORD:rabbit_local_dev_only}
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 1
+        default-requeue-rejected: false
+
+commerce:
+  scenario:
+    name: ${SCENARIO_NAME:NORMAL}
+    enabled: ${SCENARIO_ENABLED:false}
+    fulfillment-error-after-ms: ${FULFILLMENT_ERROR_AFTER_MS:100}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    db:
+      enabled: true
+    rabbit:
+      enabled: true

@@ -1,0 +1,48 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: api-gateway
+  lifecycle:
+    timeout-per-shutdown-phase: 15s
+  cloud:
+    gateway:
+      httpclient:
+        connect-timeout: 3000
+        response-timeout: 15s
+      routes:
+        - id: cart-service-route
+          uri: ${CART_SERVICE_URL:http://cart-service:8081}
+          predicates:
+            - Path=/api/carts/**
+          filters:
+            - RewritePath=/api/carts(?<segment>/?.*), /internal/carts$\{segment}
+        - id: checkout-service-route
+          uri: ${CHECKOUT_SERVICE_URL:http://checkout-service:8082}
+          predicates:
+            - Path=/api/checkouts/**
+          filters:
+            - RewritePath=/api/checkouts(?<segment>/?.*), /internal/checkouts$\{segment}
+
+commerce:
+  gateway:
+    cart-service-url: ${CART_SERVICE_URL:http://cart-service:8081}
+    checkout-service-url: ${CHECKOUT_SERVICE_URL:http://checkout-service:8082}
+    connect-timeout-ms: 3000
+    response-timeout-ms: 15000
+  scenario:
+    name: ${SCENARIO_NAME:NORMAL}
+    enabled: ${SCENARIO_ENABLED:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
