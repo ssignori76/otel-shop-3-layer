@@ -1,248 +1,153 @@
 # Commerce Synthetic Application (`otel-shop-3-layer`)
 
-Distributed 3-layer synthetic e-commerce application designed to generate deterministic **OpenTelemetry Traces (Spans)**, **Metrics**, and **Logs** across real HTTP, JDBC (MySQL), and AMQP (RabbitMQ) boundaries.
+Applicazione e-commerce distribuita sintetica a **3 livelli** progettata per generare e validare in modo deterministico **Tracce distribuite (Span)**, **Metriche** e **Log** OpenTelemetry attraverso chiamate reali **HTTP**, **JDBC (MySQL)** e **AMQP (RabbitMQ)**.
+
+Il progetto funziona in modo identico su **Docker Compose** e su **Kubernetes** (`kind` in locale o cluster remoti monitorati da **Dynatrace**), con sviluppo, build e test eseguiti **interamente in container**.
 
 ---
 
-## 1. Architecture Overview
+## 1. Scopo del Progetto
+
+- Esercitare un flusso e-commerce end-to-end reale attraverso più processi indipendenti (Web Tier → API Gateway → Microservizi → MySQL → RabbitMQ → Consumer asincrono).
+- Propagare nativamente il **W3C Trace Context** (`traceparent`, `tracestate`, `baggage`) e gli header di correlazione business (`x-run-id`, `x-journey-id`) su tutti i confini HTTP e AMQP.
+- Generare traffico continuo controllato (via `journey-generator`) e iniettare **6 scenari di errore deterministici** per validare l'osservabilità in condizioni normali e degradate.
+- Verificare automaticamente **Span, Metriche e Log** su uno stack open-source locale leggero (**Jaeger**, **VictoriaMetrics**, **VictoriaLogs**, **Fluent Bit**, **OpenTelemetry Collector**) ed essere pronto per il deployment pulito su cluster Kubernetes con **Dynatrace**.
+
+---
+
+## 2. Architettura e Struttura
 
 ```text
-Journey Generator (Java 21 + OTel Agent, :8085)
+Journey Generator (Java 21, fixed-delay 10s, :8085)
         |
-        | HTTP (POST /api/journeys)
+        | HTTP  POST /api/journeys
         v
-Apache HTTP Server (httpd:2.4.62-alpine, :80 -> host :18080)
+Apache HTTP Server (httpd:2.4.62-alpine, :80 / host :18080)
         |
-        | reverse proxy /api/* (preserves W3C traceparent + x-run-id + x-journey-id)
+        | reverse proxy /api/* (preserva W3C traceparent + x-run-id + x-journey-id)
         v
 Spring Cloud Gateway (api-gateway, WebFlux, :8080)
         |
-        +------------------------------+
-        |                              |
-        v                              v
-  Cart Service                  Checkout Service
-  (:8081, MVC)                  (:8082, MVC)
-        |                        |      |      |
-        | JDBC                   | JDBC | HTTP | AMQP (Publisher Confirms)
-        v                        v      v      v
-     MySQL                    MySQL  Merchant RabbitMQ (commerce.orders)
-   (cart_db)              (checkout_db) (:8083)        |
-                                                       | AMQP (Manual ACK after DB commit)
-                                                       v
-                                              Fulfillment Service
-                                                (:8084, MVC+AMQP)
-                                                       |
-                                                       | JDBC
-                                                       v
-                                                     MySQL
-                                                (fulfillment_db)
+        +-----------------------------------+
+        |                                   |
+        v                                   v
+  Cart Service                       Checkout Service
+  (:8081, MVC)                       (:8082, MVC)
+        |                             |      |      |
+        | JDBC                        | JDBC | HTTP | AMQP (Publisher Confirms)
+        v                             v      v      v
+     MySQL                         MySQL  Merchant RabbitMQ (commerce.orders)
+   (cart_db)                   (checkout_db) (:8083)         |
+                                                             | AMQP (Manual ACK post-commit)
+                                                             v
+                                                    Fulfillment Service
+                                                      (:8084, MVC+AMQP)
+                                                             |
+                                                             | JDBC
+                                                             v
+                                                           MySQL
+                                                      (fulfillment_db)
 ```
 
-### Telemetry Pipeline (`compose.test.yaml`)
+### Componenti e Layer
 
-```text
-Java Services (6x) + OpenTelemetry Java Agent v2.10.0
-   |
-   | OTLP/gRPC (Traces + Metrics + Logs)
-   v
-OpenTelemetry Collector (otel-collector:4317 / :4318)
-   |
-   +---> [Traces Pipeline]  ---> Jaeger OTLP (jaeger:4317, UI/API :16686) + /var/log/otel/traces.json
-   |
-   +---> [Metrics Pipeline] ---> Prometheus Exporter (:8889/metrics)      + /var/log/otel/metrics.json
-   |
-   +---> [Logs Pipeline]    ---> Structured OTLP JSON                     + /var/log/otel/logs.json
-```
-
----
-
-## 2. Deployable Components
-
-| Component | Image | Runtime / Base | Internal Port | Primary Responsibility |
-|---|---|---|---:|---|
-| `apache-web` | `commerce/apache-web:1.0.0` | `httpd:2.4.62-alpine` (non-root `UID 82`) | `80` (host `18080`) | Public entry point, `/healthz`, reverse proxy `/api/*` |
-| `api-gateway` | `commerce/api-gateway:1.0.0` | Java 21, Spring Cloud Gateway | `8080` | Route dispatch, `/api/journeys` orchestration, header propagation |
-| `cart-service` | `commerce/cart-service:1.0.0` | Java 21, Spring Boot MVC + JDBC + Flyway | `8081` | Cart creation (`POST /internal/carts`) and read (`GET /internal/carts/{id}`) |
-| `checkout-service` | `commerce/checkout-service:1.0.0` | Java 21, Spring Boot MVC + JDBC + AMQP | `8082` | Checkout orchestration, MySQL order persistence, RabbitMQ confirmed publish |
-| `merchant-service` | `commerce/merchant-service:1.0.0` | Java 21, Spring Boot MVC | `8083` | Payment authorization simulation (`POST /internal/payments/authorize`) |
-| `fulfillment-service` | `commerce/fulfillment-service:1.0.0` | Java 21, Spring Boot MVC + AMQP + JDBC | `8084` | Manual-ACK RabbitMQ consumer, idempotent MySQL fulfillment persistence |
-| `journey-generator` | `commerce/journey-generator:1.0.0` | Java 21, Spring Boot Scheduler + REST | `8085` | Fixed-delay journey scheduler (default 10s, `max_in_flight=1`) and trigger API |
-| `mysql` | `mysql:8.4.3` | MySQL 8.4 LTS (`utf8mb4_0900_ai_ci`, UTC) | `3306` | Isolated schemas (`cart_db`, `checkout_db`, `fulfillment_db`) and dedicated users |
-| `rabbitmq` | `rabbitmq:3.13.7-management-alpine` | RabbitMQ 3.13 | `5672`, `15672` | Durable topic exchanges and queues with Dead-Letter routing |
-| `otel-collector` | `commerce/otel-collector:1.0.0` | `otel/opentelemetry-collector-contrib:0.114.0` | `4317`, `4318`, `8889` | Receives OTLP Traces, Metrics, and Logs; exports to Jaeger, Prometheus, and JSON |
-| `jaeger` | `jaegertracing/all-in-one:1.62.0` | Jaeger All-in-One | `4317`, `16686` | Test OTLP trace backend and HTTP query API |
-| `test-runner` | `commerce/test-runner:1.0.0` | `python:3.12.7-alpine` | — | Automated verification of Gates 2–12 (DB, AMQP, Jaeger Traces, Metrics, Logs) |
+| Layer (K8s Namespace) | Componente | Tecnologia | Responsabilità |
+|---|---|---|---|
+| **Edge** (`commerce-edge`) | `apache-web` | Apache `httpd:2.4.62-alpine` (`UID 82`) | Entry point pubblico, `/healthz`, reverse proxy `/api/*` |
+| **Edge** (`commerce-edge`) | `api-gateway` | Java 21, Spring Cloud Gateway | Orchestrazione `POST /api/journeys`, rotte statiche, propagazione header |
+| **Edge** (`commerce-edge`) | `journey-generator` | Java 21, Spring Boot | Simulatore traffico continuo (10s, `max_in_flight=1`) + API trigger |
+| **Core** (`commerce-core`) | `cart-service` | Java 21, Spring MVC + JDBC + Flyway | Creazione e lettura carrello su `cart_db` |
+| **Core** (`commerce-core`) | `checkout-service` | Java 21, Spring MVC + JDBC + AMQP | Orchestrazione checkout, ordine su `checkout_db`, publish RabbitMQ confermato |
+| **Core** (`commerce-core`) | `merchant-service` | Java 21, Spring MVC | Simulazione autorizzazione pagamento |
+| **Core** (`commerce-core`) | `fulfillment-service` | Java 21, Spring MVC + AMQP + JDBC | Consumer AMQP (prefetch 1, ACK manuale dopo commit su `fulfillment_db`) |
+| **Data** (`commerce-data`) | `mysql` | MySQL `8.4.3` (`utf8mb4_0900_ai_ci`, UTC) | 3 schemi e 3 utenti isolati (`cart_db`, `checkout_db`, `fulfillment_db`) |
+| **Data** (`commerce-data`) | `rabbitmq` | RabbitMQ `3.13.7-management-alpine` | Exchange `commerce.orders`, coda `commerce.fulfillment`, DLX/DLQ durevoli |
+| **Observability** (`commerce-observability`) | `otel-collector`, `jaeger`, `victoria-metrics`, `victoria-logs`, `fluent-bit` | Stack OTel open-source leggero *(solo test/locale)* | Raccolta e visualizzazione di Traces, Metrics e Logs (OTLP + container stdout) |
 
 ---
 
-## 3. Functional Workflow & State Machine
+## 3. Scenari Previsti
 
-### Canonical Journey State Model
+Il flusso canonico attraversa gli stati `STARTED → PAGE_LOADED → CART_CREATED → CART_READ → PAYMENT_AUTHORIZED → ORDER_PUBLISHED → FULFILLED`.  
+Con `SCENARIO_ENABLED=false` il sistema esegue sempre il flusso `NORMAL` anche se è configurato un altro `SCENARIO_NAME`.
 
-```text
-STARTED -> PAGE_LOADED -> CART_CREATED -> CART_READ -> PAYMENT_AUTHORIZED -> ORDER_PUBLISHED -> FULFILLED
-```
-
-Terminal failure states:
-- `CHECKOUT_FAILED` (`BE_ERROR`)
-- `DB_TIMEOUT` (`DB_TIMEOUT`)
-- `MERCHANT_TIMEOUT` (`MERCHANT_TIMEOUT`)
-- `PAYMENT_AUTHORIZED_NOT_PUBLISHED` (`BROKER_UNAVAILABLE`)
-- `FULFILLMENT_FAILED` (`FULFILLMENT_ERROR`)
-- `INTERNAL_FAILURE`
-
-### Propagated Headers
-
-| Header | Purpose | Scope |
-|---|---|---|
-| `traceparent` | W3C Trace Context | All HTTP and RabbitMQ boundaries |
-| `tracestate` | W3C vendor state | Preserved across HTTP and AMQP |
-| `baggage` | W3C baggage | Preserved across HTTP and AMQP |
-| `x-run-id` | Run correlation UUID | All business HTTP calls, AMQP headers, spans, and logs |
-| `x-journey-id` | Journey correlation UUID | All business HTTP calls, AMQP headers, spans, and logs |
-| `x-simulation-scenario` | Selected fault scenario | Internal network / test harness |
-| `x-simulation-enabled` | Fault activation flag (`true`/`false`) | Internal network / test harness |
-
----
-
-## 4. Database & Messaging Design
-
-### MySQL 8.4 Schema Separation
-
-| Service | Schema | Dedicated User | Flyway Migration | Primary Table & Constraints |
-|---|---|---|---|---|
-| `cart-service` | `cart_db` | `cart_app` | [`V1__create_cart_table.sql`](database/cart/migrations/V1__create_cart_table.sql) | `cart` (`PK cart_id`, `UNIQUE journey_id`) |
-| `checkout-service` | `checkout_db` | `checkout_app` | [`V1__create_orders_table.sql`](database/checkout/migrations/V1__create_orders_table.sql) | `orders` (`PK order_id`, `UNIQUE journey_id`) |
-| `fulfillment-service` | `fulfillment_db` | `fulfillment_app` | [`V1__create_fulfillment_table.sql`](database/fulfillment/migrations/V1__create_fulfillment_table.sql) | `fulfillment` (`PK fulfillment_id`, `UNIQUE order_id`, `UNIQUE journey_id`) |
-
-Cross-schema queries between application users are rejected at the MySQL privilege layer and verified in Gate 8.
-
-### RabbitMQ Topology
-
-- **Exchange**: `commerce.orders` (`topic`, `durable=true`)
-- **Routing key**: `order.created`
-- **Queue**: `commerce.fulfillment` (`durable=true`, `x-dead-letter-exchange=commerce.orders.dlx`)
-- **Dead-letter exchange**: `commerce.orders.dlx` (`topic`, `durable=true`)
-- **Dead-letter queue**: `commerce.fulfillment.dlq` (`durable=true`)
-- **Reliability**:
-  - Publisher confirms (`ConfirmType.CORRELATED`) are mandatory before updating order status to `PUBLISHED`.
-  - Consumer acknowledgement is `MANUAL` (`prefetch=1`) and is sent strictly after the MySQL `fulfillment_db` transaction commits.
-
----
-
-## 5. Deterministic Scenarios
-
-`SCENARIO_ENABLED=false` forces the `NORMAL` execution path even when a non-normal `SCENARIO_NAME` is supplied.
-
-| Scenario | Injection Point | HTTP Status | DB & Messaging Outcome | Telemetry Outcome (Spans, Metrics, Logs) |
+| Scenario | Punto di iniezione | HTTP | Effetto su DB / RabbitMQ | Telemetria attesa |
 |---|---|---:|---|---|
-| `NORMAL` | None | `202` | Cart `CART_READ`, Order `PUBLISHED`, Fulfillment `FULFILLED` | Single 6-service trace, completion metrics incremented, `INFO` state logs |
-| `DB_SLOW` | Checkout MySQL | `202` | Real `SELECT SLEEP(1.5)` query; full workflow completes | Delayed JDBC span visible in Jaeger; completion metrics & `INFO` logs |
-| `BE_ERROR` | Checkout pre-DB | `500` | Fails before DB; no order row, no Merchant call, no AMQP publish | Error spans on Checkout & Gateway, `commerce.checkouts.failed` incremented, `ERROR` log |
-| `DB_TIMEOUT` | Checkout MySQL | `504` | Real JDBC `SQLTimeoutException`; no Merchant call, no AMQP publish | Error JDBC & server spans, `error_code=DB_TIMEOUT`, `ERROR` log |
-| `MERCHANT_TIMEOUT` | Merchant HTTP call | `504` | Real HTTP read timeout; no order row, no AMQP publish | Error client & server spans, `error_code=MERCHANT_TIMEOUT`, `ERROR` log |
-| `BROKER_UNAVAILABLE` | RabbitMQ publish | `503` | Order persisted with `PAYMENT_AUTHORIZED_NOT_PUBLISHED`; no consumer message | Error span on Checkout, `error_code=BROKER_UNAVAILABLE`, `ERROR` log |
-| `FULFILLMENT_ERROR` | Fulfillment consumer | `202` | Order `PUBLISHED`, consumer rejects (`requeue=false`) to `commerce.fulfillment.dlq`, no fulfillment row | Error consumer span in Jaeger, `commerce.fulfillments.failed` incremented, `ERROR` log |
+| `NORMAL` | Nessuno | `202` | Carrello `CART_READ`, Ordine `PUBLISHED`, Fulfillment `FULFILLED` | Singola traccia a 6 servizi, metriche completamento, log `INFO` |
+| `DB_SLOW` | MySQL in Checkout | `202` | Query reale `SELECT SLEEP(1.5)` su `checkout_db`; flusso completato | Span JDBC lento visibile su Jaeger; completamento normale |
+| `BE_ERROR` | Checkout pre-DB | `500` | Errore prima del DB; nessun ordine, nessuna chiamata Merchant/RabbitMQ | Span di errore su Checkout/Gateway, `error_code=BE_ERROR`, log `ERROR` |
+| `DB_TIMEOUT` | MySQL in Checkout | `504` | Timeout JDBC reale (`SQLTimeoutException`); nessun publish AMQP | Span JDBC con timeout, `error_code=DB_TIMEOUT`, log `ERROR` |
+| `MERCHANT_TIMEOUT` | Chiamata HTTP Merchant | `504` | Timeout client HTTP reale; nessun ordine né publish AMQP | Span HTTP client in timeout, `error_code=MERCHANT_TIMEOUT`, log `ERROR` |
+| `BROKER_UNAVAILABLE` | Publish RabbitMQ | `503` | Ordine salvato `PAYMENT_AUTHORIZED_NOT_PUBLISHED`; nessun consumer | Span errore publish, `error_code=BROKER_UNAVAILABLE`, log `ERROR` |
+| `FULFILLMENT_ERROR` | Consumer Fulfillment | `202` | Ordine `PUBLISHED`, consumer rifiuta (`requeue=false`) verso DLQ `commerce.fulfillment.dlq`, nessuna riga fulfillment | Span consumer con errore su Jaeger, `commerce.fulfillments.failed`, log `ERROR` |
 
 ---
 
-## 6. OpenTelemetry Signals: Spans, Metrics, and Logs
+## 4. Osservabilità: Span, Metriche e Log
 
-### 6.1 Distributed Traces (Spans)
-- Instrumented via **OpenTelemetry Java Agent `v2.10.0`** with W3C `tracecontext,baggage` propagation.
-- Enriched with business attributes (`commerce.run_id`, `commerce.journey_id`, `commerce.scenario`, `commerce.scenario_enabled`, `commerce.effective_scenario`, `commerce.journey.state`, `commerce.cart_id`, `commerce.order_id`, `commerce.fulfillment_id`, `commerce.error_code`).
+Tutti i 6 servizi Java integrano l'**OpenTelemetry Java Agent `v2.10.0`** più la libreria condivisa `scenario-contract` ([`TelemetryHelper.java`](libs/scenario-contract/src/main/java/com/commerce/synthetic/scenario/TelemetryHelper.java)):
 
-### 6.2 OpenTelemetry Metrics (Automatic + Custom Business Metrics)
-Exported via OTLP (`OTEL_METRICS_EXPORTER=otlp`) to `otel-collector` and exposed at `http://otel-collector:8889/metrics` and `/var/log/otel/metrics.json`:
-- **Automatic Agent Metrics**:
-  - `http.server.request.duration` (`s`)
-  - `http.client.request.duration` (`s`)
-  - `jvm.memory.used` (`By`)
-  - `db.client.connections.usage` (`{connection}`)
-- **Custom Business Metrics (`commerce.synthetic.metrics`)**:
-  - `journey-generator`: `commerce.journeys.started`, `commerce.journeys.completed`, `commerce.journeys.failed`, `commerce.journey.client.duration` (`ms`)
-  - `api-gateway`: `commerce.gateway.requests`, `commerce.gateway.orchestration.duration` (`ms`)
-  - `cart-service`: `commerce.carts.created`, `commerce.carts.read`, `commerce.cart.operation.duration` (`ms`)
-  - `checkout-service`: `commerce.checkouts.started`, `commerce.checkouts.completed`, `commerce.checkouts.failed`, `commerce.orders.published`, `commerce.checkout.duration` (`ms`)
-  - `merchant-service`: `commerce.payments.requests`, `commerce.payment.authorization.duration` (`ms`)
-  - `fulfillment-service`: `commerce.fulfillments.received`, `commerce.fulfillments.completed`, `commerce.fulfillments.failed`, `commerce.fulfillment.duration` (`ms`)
+- **Traces (Spans)**: auto-strumentazione HTTP, JDBC e Spring AMQP arricchita con attributi business (`commerce.run_id`, `commerce.journey_id`, `commerce.scenario`, `commerce.journey.state`, `commerce.cart_id`, `commerce.order_id`, `commerce.fulfillment_id`).
+- **Metrics**: 4 famiglie runtime automatiche (`http.server.request.duration`, `http.client.request.duration`, `jvm.memory.used`, `db.client.connections.usage`) + **20 metriche custom di business** (`commerce.journeys.*`, `commerce.gateway.*`, `commerce.carts.*`, `commerce.checkouts.*`, `commerce.orders.published`, `commerce.payments.*`, `commerce.fulfillments.*`).
+- **Logs**: doppio canale — **JSON strutturato su `stdout`** (incluso Apache, raccolto in K8s da **Fluent Bit**) + **OTLP LogRecords** con `trace_id`, `span_id` e attributi MDC (`run_id`, `journey_id`, `scenario`, `journey_state`).
 
-### 6.3 OpenTelemetry Logs & Structured Stdout Logs
-- **Stdout JSON Logs**: Single-line JSON emitted by all Java services (`logback-spring.xml`) and Apache (`httpd.conf` `json_telemetry` format) with `timestamp`, `severity`, `service`, `trace_id`, `span_id`, `run_id`, `journey_id`, `scenario`, `journey_state`, `error_code`, and `message`.
-- **OTLP LogRecords**: Exported via `OTEL_LOGS_EXPORTER=otlp` with `-Dotel.instrumentation.logback-appender.experimental.capture-mdc-attributes=*`, preserving native OTLP `traceId`, `spanId`, `severityText`, and all MDC correlation attributes in `/var/log/otel/logs.json`.
+Per il catalogo completo di metriche, attributi e formati log vedere [`docs/metrics-and-logs-specification.md`](docs/metrics-and-logs-specification.md).
 
 ---
 
-## 7. Host Requirements & Operator Commands
+## 5. Come si Utilizza (Quick Start)
 
-The host requires **only Docker Engine, Docker Compose, and Git**. No local JDK or Maven installation is needed.
+**Prerequisiti sull'host**: solo **Docker Engine**, **Docker Compose** e **Git** (nessun JDK o Maven locale richiesto).
 
-| Command | Description |
-|---|---|
-| `make build` | Build all container images with CycloneDX SBOMs and verify non-root UIDs |
-| `make unit-test` | Run Maven unit tests and JaCoCo coverage inside Docker |
-| `make integration-test` | Start test stack and verify MySQL and RabbitMQ readiness contracts |
-| `make e2e-test` | Execute complete E2E suite (30 normal journeys + 6x3 fault scenarios + Jaeger, Metrics, Logs gates) |
-| `make test` | Run unit tests, build all images, and run the complete E2E verification suite |
-| `make up` | Start the test stack in background and wait for all health checks |
-| `make down` | Stop and remove all containers and ephemeral volumes |
-| `make clean` | Tear down stack and clean generated test reports |
-| `make publish` | Push verified images to container registry (requires passing `test/reports/e2e-test-report.json`) |
-| `make k8s-up` | Create `kind` cluster, load local images, and deploy `k8s/overlays/local-observability` |
-| `make k8s-up-dynatrace` | Deploy `k8s/overlays/dynatrace-ready` (only 3 app namespaces, no local observability) |
-| `make k8s-test` | Validate `dynatrace-ready` overlay + run full E2E verification Job on `kind` (Gates 3–12) |
-| `make k8s-down` | Delete the `kind` cluster `commerce-synthetic` |
-| `make k8s-render-dynatrace` | Render `k8s/overlays/dynatrace-ready` manifests via `kubectl kustomize` |
-
-### Kubernetes (`kind`) Multi-Namespace Deployment
-
-The repository includes a Kustomize-based Kubernetes deployment under [`k8s/`](k8s/) organized into 3 application namespaces plus an optional observability namespace:
-
-| Namespace | Role | Deployed Workloads |
-|---|---|---|
-| `commerce-edge` | FE / Edge Tier | `apache-web` (NodePort `30080` → host `18080`), `api-gateway`, `journey-generator` |
-| `commerce-core` | BE / Business Microservices | `cart-service`, `checkout-service`, `merchant-service`, `fulfillment-service` |
-| `commerce-data` | DB & Messaging Tier | `mysql` (`StatefulSet`), `rabbitmq` (`StatefulSet`) |
-| `commerce-observability` | Local Observability *(only `local-observability` overlay)* | `otel-collector`, `jaeger` (`:16686`), `victoria-metrics` (`:18428/vmui`), `victoria-logs` (`:19428/select/vmui`), `fluent-bit` (`DaemonSet`) |
-
-Two Kustomize overlays are provided:
-- **`k8s/overlays/local-observability`**: Deploys all 4 namespaces with Jaeger (Traces), VictoriaMetrics (Metrics), VictoriaLogs + Fluent Bit (OTLP + container stdout Logs), and OpenTelemetry Collector.
-  - Entry Point: `http://localhost:18080/healthz`
-  - Jaeger UI: `http://localhost:16686`
-  - VictoriaMetrics UI: `http://localhost:18428/vmui`
-  - VictoriaLogs UI: `http://localhost:19428/select/vmui`
-- **`k8s/overlays/dynatrace-ready`**: Deploys **only** `commerce-edge`, `commerce-core`, and `commerce-data` (zero local observability pods), rewrites image references to the published Docker Hub repositories (`docker.io/lusig76/otel-shop-*:1.0.0`), and disables the bundled OTel Java Agent (`JAVA_TOOL_OPTIONS=""`) so Dynatrace Operator / OneAgent can instrument the cluster without double-agent conflicts.
-
-### Published Docker Hub Images (`lusig76`)
-
-All images are published with semantic version (`1.0.0`) and short Git commit SHA tags (never `latest`):
-
-- `docker.io/lusig76/otel-shop-apache-web:1.0.0`
-- `docker.io/lusig76/otel-shop-api-gateway:1.0.0`
-- `docker.io/lusig76/otel-shop-cart-service:1.0.0`
-- `docker.io/lusig76/otel-shop-checkout-service:1.0.0`
-- `docker.io/lusig76/otel-shop-merchant-service:1.0.0`
-- `docker.io/lusig76/otel-shop-fulfillment-service:1.0.0`
-- `docker.io/lusig76/otel-shop-journey-generator:1.0.0`
-- `docker.io/lusig76/otel-shop-otel-collector:1.0.0`
-- `docker.io/lusig76/otel-shop-test-runner:1.0.0`
-
-### Dynatrace OTLP Mode (Docker Compose)
-
-To run with Dynatrace OTLP export (`traces`, `metrics` with `cumulativetodelta`, and `logs`):
-
+### A. Docker Compose (Locale)
 ```bash
-export DT_OTLP_ENDPOINT="https://<environment-id>.live.dynatrace.com/api/v2/otlp"
-export DT_API_TOKEN="<dynatrace-ingest-token>"
-./scripts/compose-up.sh dynatrace
+make test       # Esegue unit test, build immagini non-root e suite E2E completa (Gate 1–12)
+make up         # Avvia lo stack completo con Jaeger e OTel Collector
+make down       # Ferma e rimuove container e volumi effimeri
 ```
 
+### B. Kubernetes Locale con `kind` (Con Osservabilità Completa)
+Installa automaticamente `kind` e `kubectl` in `~/.local/bin` (senza sporcare il sistema), crea il cluster `commerce-synthetic` con 4 namespace e verifica tutti i gate:
+```bash
+make build      # Costruisce le immagini locali (se non già presenti)
+make k8s-up     # Avvia kind con overlay local-observability (4 namespace)
+make k8s-test   # Valida overlay dynatrace-ready ed esegue il Job E2E su kind
+make k8s-down   # Elimina il cluster kind
+```
+**UI locali esposte dal cluster `kind`**:
+- **Apache Entry Point**: `http://localhost:18080/healthz`
+- **Jaeger (Traces)**: `http://localhost:16686`
+- **VictoriaMetrics (Metrics)**: `http://localhost:18428/vmui`
+- **VictoriaLogs (Logs)**: `http://localhost:19428/select/vmui`
+
+### C. Cluster Kubernetes Remoto con Dynatrace (Senza Osservabilità Locale)
+L'overlay [`k8s/overlays/dynatrace-ready`](k8s/overlays/dynatrace-ready/kustomization.yaml) installa **solo** i 3 namespace applicativi (`commerce-edge`, `commerce-core`, `commerce-data`), usa le immagini pubbliche su Docker Hub (`docker.io/lusig76/otel-shop-*:1.0.0`) e disabilita l'OTel Java Agent locale per lasciare campo libero a **Dynatrace Operator / OneAgent**:
+```bash
+kubectl apply -k k8s/overlays/dynatrace-ready
+```
+
+### Immagini Pubblicate su Docker Hub (`lusig76`)
+Tutte le immagini sono pubblicate con tag semantico (`1.0.0`) e short Git SHA (mai `latest`):
+`lusig76/otel-shop-apache-web`, `lusig76/otel-shop-api-gateway`, `lusig76/otel-shop-cart-service`, `lusig76/otel-shop-checkout-service`, `lusig76/otel-shop-merchant-service`, `lusig76/otel-shop-fulfillment-service`, `lusig76/otel-shop-journey-generator`, `lusig76/otel-shop-otel-collector`, `lusig76/otel-shop-test-runner`.
+
 ---
 
-## 8. Normative Documentation & Reports
+## 6. Note di Sviluppo e Qualità
 
-- [Definitive Architecture, Implementation and Test Specification](docs/definitive-specification.md)
-- [OpenTelemetry Metrics and Logs Specification](docs/metrics-and-logs-specification.md)
-- Generated E2E Reports (created by `make test` / `make e2e-test`):
-  - `test/reports/e2e-test-summary.txt`
-  - `test/reports/e2e-test-report.json`
+- **Container-only & Zero-Host-Pollution**: compilazione Maven multi-modulo, test JUnit 5, coverage JaCoCo e generazione SBOM CycloneDX (`/app/sbom.cdx.json`) avvengono nel Dockerfile multi-stage condiviso [`docker/java-service/Dockerfile`](docker/java-service/Dockerfile).
+- **Sicurezza by-design**: immagini base version-pinned, esecuzione non-root (`UID 10001` per Java/OTel/Test-runner, `UID 82` per Apache), utenti MySQL isolati per schema, nessuna credenziale tracciata in Git o esposta in span/log.
+- **Qualità verificata**: 12 Quality Gate automatizzati che coprono stabilità su 30 journey `NORMAL`, 6x3 scenari di fault injection, integrità DB/RabbitMQ, tracce Jaeger, 24 famiglie di metriche e log correlati.
+
+---
+
+## 7. Indice Documentazione & Mappa per Agenti Coder
+
+Questo `README.md` è l'indice principale del repository. Per dettagli specialistici o attività di sviluppo/evoluzione consultare i documenti dedicati in [`docs/`](docs/):
+
+| Documento | Contenuto principale | Quando leggerlo (umani & agenti coder) |
+|---|---|---|
+| [`docs/definitive-specification.md`](docs/definitive-specification.md) | Specifica normativa baseline: architettura, contratti HTTP/AMQP/DB, state machine, scenari e Gate 1–10. *(Copia canonica della specifica in root)* | Prima di modificare contratti REST/AMQP, schemi DB o semantica degli scenari. |
+| [`docs/metrics-and-logs-specification.md`](docs/metrics-and-logs-specification.md) | Estensione normativa per OpenTelemetry Metrics (24 famiglie) e Logs (stdout JSON + OTLP + MDC) e Gate 11–12. | Prima di aggiungere/modificare metriche custom, campi MDC o pipeline Collector. |
+| [`docs/kubernetes-deployment.md`](docs/kubernetes-deployment.md) | Architettura K8s a 4 namespace, best practice manifest, `kind`, overlay `local-observability` vs `dynatrace-ready` (Modalità A/B). | Per deploy su `kind` o su cluster Kubernetes remoto con Dynatrace. |
+| [`docs/quality-and-testing.md`](docs/quality-and-testing.md) | Piramide di test containerizzata, definizione completa dei **12 Quality Gate**, esecuzione test unit/integration/E2E e lettura report. | Per eseguire verifiche di qualità, diagnosticare fallimenti o estendere la suite di test. |
+| [`docs/development-and-maintenance.md`](docs/development-and-maintenance.md) | Come evolvere e mantenere il monorepo (nuovi scenari, metriche, migrazioni Flyway, rilascio immagini Docker Hub) e regole invarianti per agenti coder. | Prima di qualsiasi evoluzione del codice o rilascio di nuova versione. |
