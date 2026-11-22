@@ -13,6 +13,15 @@ services:
     networks:
       - commerce-net
 
+  auth-service:
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+
   cart-service:
     environment:
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}

@@ -27,7 +27,7 @@ The application is split across **3 application namespaces** (plus an optional 4
 
 ## 2. Kustomize Overlays
 
-### 2.1 `k8s/overlays/local-observability` (Local Development & Testing on `kind`)
+### 2.1 Development Mode — `k8s/overlays/local-observability` (Local `kind` with Local Observability Stack)
 
 Includes `k8s/base` + the `commerce-observability` namespace with a lightweight open-source stack (< 300 MB total RAM):
 - **OpenTelemetry Collector** (`commerce/otel-collector:2.0.0`): receives OTLP/gRPC (`:4317`) from all 7 Java services and routes:
@@ -46,7 +46,7 @@ make k8s-up
 - **VictoriaMetrics UI (Metrics)**: `http://localhost:18428/vmui`
 - **VictoriaLogs UI (Logs)**: `http://localhost:19428/select/vmui`
 
-### 2.2 `k8s/overlays/dynatrace-ready` (Remote Cluster Monitored by Dynatrace)
+### 2.2 Production Mode — `k8s/overlays/dynatrace-ready` (Dynatrace-Monitored Cluster, No Local Observability Stack)
 
 Includes **only** the 3 application namespaces (`commerce-edge`, `commerce-core`, `commerce-data`). Excludes `commerce-observability`, Jaeger, VictoriaMetrics, VictoriaLogs, and Fluent Bit.
 - **Public Docker Hub Images**: uses the Kustomize `images:` transformer to rewrite all image references to `docker.io/lusig76/otel-shop-*:2.0.0`.

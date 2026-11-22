@@ -129,13 +129,13 @@ For the full metrics, attributes, and log format catalog see [`docs/metrics-and-
 
 ## 5. How to Use
 
-The project supports **two cleanly separated operating modes**: a self-contained local development/test environment with an open-source observability stack, and a real environment designed for clusters monitored by **Dynatrace**.
+The project supports **two cleanly separated operating modes**: **Development** (self-contained local environment with an open-source observability stack) and **Production** (clean deployment for clusters/hosts monitored by **Dynatrace**, without local observability tools).
 
 **Host prerequisites**: only **Docker Engine**, **Docker Compose**, and **Git** (no local JDK, Maven, Node, or Python required).
 
 ---
 
-### Part A — Local Development & Test Environment (with Local Observability Stack)
+### Part A — Development Mode (with Local Observability Stack)
 
 Includes the local open-source observability stack to inspect and automatically verify **Spans (Jaeger)**, **Metrics (VictoriaMetrics / Prometheus)**, and **Logs (VictoriaLogs + Fluent Bit / OTLP)** with zero external dependencies.
 
@@ -165,9 +165,9 @@ make k8s-down   # Deletes the kind cluster
 
 ---
 
-### Part B — Real Environment with Dynatrace (No Local Observability Stack)
+### Part B — Production Mode (Dynatrace-Ready, No Local Observability Stack)
 
-Designed for deployment on a **real Kubernetes cluster** (or Docker host) already monitored by **Dynatrace**, completely excluding Jaeger, VictoriaMetrics, VictoriaLogs, Fluent Bit, and the `commerce-observability` namespace.
+Designed for deployment on a **Production Kubernetes cluster** (or Docker host) already monitored by **Dynatrace**, completely excluding Jaeger, VictoriaMetrics, VictoriaLogs, Fluent Bit, and the `commerce-observability` namespace.
 
 #### 1. Deploy to a Kubernetes Cluster with Dynatrace
 The [`k8s/overlays/dynatrace-ready`](k8s/overlays/dynatrace-ready/kustomization.yaml) overlay:
