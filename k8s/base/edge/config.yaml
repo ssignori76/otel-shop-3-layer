@@ -6,10 +6,14 @@ metadata:
   labels:
     app.kubernetes.io/part-of: commerce-synthetic
 data:
+  AUTH_SERVICE_URL: http://auth-service.commerce-core.svc.cluster.local:8086
   CART_SERVICE_URL: http://cart-service.commerce-core.svc.cluster.local:8081
   CHECKOUT_SERVICE_URL: http://checkout-service.commerce-core.svc.cluster.local:8082
+  FULFILLMENT_SERVICE_URL: http://fulfillment-service.commerce-core.svc.cluster.local:8084
   GENERATOR_TARGET_URL: http://apache-web.commerce-edge.svc.cluster.local:80
   GENERATOR_ENABLED: "true"
+  GENERATOR_AUTH_ENABLED: "true"
+  GENERATOR_AUTH_EMAIL: synthetic@otelshop.local
   GENERATOR_INTERVAL_SECONDS: "10"
   GENERATOR_INITIAL_DELAY_SECONDS: "5"
   GENERATOR_MAX_IN_FLIGHT: "1"
@@ -18,9 +22,22 @@ data:
   GENERATOR_STOP_ON_UNEXPECTED_ERROR: "false"
   SCENARIO_NAME: NORMAL
   SCENARIO_ENABLED: "false"
-  OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=kubernetes,service.version=1.0.0
+  OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=kubernetes,service.version=2.0.0
   OTEL_PROPAGATORS: tracecontext,baggage
   OTEL_TRACES_SAMPLER: always_on
   OTEL_TRACES_EXPORTER: none
   OTEL_METRICS_EXPORTER: none
   OTEL_LOGS_EXPORTER: none
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: commerce-edge-secrets
+  namespace: commerce-edge
+  labels:
+    app.kubernetes.io/part-of: commerce-synthetic
+type: Opaque
+stringData:
+  JWT_SECRET: commerce-local-dev-jwt-secret-key-2026-change-in-prod
+  GENERATOR_AUTH_PASSWORD: SynthPass123!
+  GENERATOR_STATIC_TOKEN: ""

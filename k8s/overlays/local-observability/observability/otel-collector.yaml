@@ -106,7 +106,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: otel-collector
-          image: commerce/otel-collector:1.0.0
+          image: commerce/otel-collector:2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: otlp-grpc

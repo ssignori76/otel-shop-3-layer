@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OTel Shop — Demo E-Commerce SPA</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-inner">
+            <a href="/" data-link class="brand">
+                <span class="brand-dot"></span>
+                <span>OTel Shop</span>
+                <span class="version-pill">v2.0</span>
+            </a>
+
+            <nav class="nav-links" aria-label="Main navigation">
+                <a href="/" data-link class="nav-link" id="nav-home">Products</a>
+                <a href="/cart" data-link class="nav-link" id="nav-cart">
+                    Cart <span class="cart-badge" id="cart-count-badge">0</span>
+                </a>
+                <a href="/orders" data-link class="nav-link" id="nav-orders">My Orders</a>
+            </nav>
+
+            <div class="nav-auth" id="nav-auth"></div>
+        </div>
+    </header>
+
+    <main class="container main-content" id="app" aria-live="polite">
+        <div class="loading-box">Loading storefront...</div>
+    </main>
+
+    <footer class="footer">
+        <div class="container footer-inner">
+            <span>OTel Shop 3-Layer — Distributed Observability &amp; RUM Demo</span>
+            <span id="footer-session" class="mono"></span>
+        </div>
+    </footer>
+
+    <div id="toast-container" class="toast-container" aria-live="assertive"></div>
+
+    <script type="module" src="/js/app.js"></script>
+</body>
+</html>

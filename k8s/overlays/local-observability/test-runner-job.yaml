@@ -23,7 +23,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: test-runner
-          image: commerce/test-runner:1.0.0
+          image: commerce/test-runner:2.0.0
           imagePullPolicy: IfNotPresent
           env:
             - name: APACHE_URL

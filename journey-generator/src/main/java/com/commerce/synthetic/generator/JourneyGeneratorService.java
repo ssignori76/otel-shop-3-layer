@@ -1,8 +1,11 @@
 package com.commerce.synthetic.generator;
 
 import com.commerce.synthetic.api.ApiErrorResponse;
+import com.commerce.synthetic.api.AuthResponse;
 import com.commerce.synthetic.api.JourneyResponse;
 import com.commerce.synthetic.api.JourneyStartRequest;
+import com.commerce.synthetic.api.LoginRequest;
+import com.commerce.synthetic.api.RegisterRequest;
 import com.commerce.synthetic.scenario.CorrelationHeaders;
 import com.commerce.synthetic.scenario.JourneyState;
 import com.commerce.synthetic.scenario.ScenarioContext;
@@ -14,6 +17,7 @@ import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -45,6 +49,7 @@ public class JourneyGeneratorService {
     private final String defaultRunId = UUID.randomUUID().toString();
     private final ReentrantLock inFlightLock = new ReentrantLock(true);
     private final AtomicBoolean activeInFlight = new AtomicBoolean(false);
+    private final AtomicBoolean registrationVerified = new AtomicBoolean(false);
     private final AtomicInteger executedCount = new AtomicInteger(0);
     private final AtomicLong lastCompletedAtMs = new AtomicLong(0L);
     private final List<JourneyExecutionRecord> history = new CopyOnWriteArrayList<>();
@@ -172,13 +177,18 @@ public class JourneyGeneratorService {
             String traceId = "";
 
             try {
-                JourneyResponse response = restClient.post()
+                String bearerToken = resolveBearerToken(ctx);
+                RestClient.RequestBodySpec requestSpec = restClient.post()
                         .uri("/api/journeys")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header(CorrelationHeaders.RUN_ID, ctx.runId())
                         .header(CorrelationHeaders.JOURNEY_ID, ctx.journeyId())
                         .header(CorrelationHeaders.SIMULATION_SCENARIO, ctx.scenarioName().name())
-                        .header(CorrelationHeaders.SIMULATION_ENABLED, Boolean.toString(ctx.scenarioEnabled()))
+                        .header(CorrelationHeaders.SIMULATION_ENABLED, Boolean.toString(ctx.scenarioEnabled()));
+                if (bearerToken != null && !bearerToken.isBlank()) {
+                    requestSpec = requestSpec.header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken);
+                }
+                JourneyResponse response = requestSpec
                         .body(payload)
                         .retrieve()
                         .body(JourneyResponse.class);
@@ -309,6 +319,58 @@ public class JourneyGeneratorService {
 
     public boolean isInFlight() {
         return activeInFlight.get();
+    }
+
+    private String resolveBearerToken(ScenarioContext ctx) {
+        if (!properties.isAuthEnabled()) {
+            return null;
+        }
+        String staticToken = properties.getStaticToken();
+        if (staticToken != null && !staticToken.isBlank()) {
+            return staticToken.trim();
+        }
+        if (registrationVerified.compareAndSet(false, true)) {
+            try {
+                restClient.post()
+                        .uri("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header(CorrelationHeaders.RUN_ID, ctx.runId())
+                        .header(CorrelationHeaders.JOURNEY_ID, ctx.journeyId())
+                        .body(new RegisterRequest(
+                                properties.getAuthEmail(),
+                                properties.getAuthFullName(),
+                                properties.getAuthPassword()
+                        ))
+                        .retrieve()
+                        .body(AuthResponse.class);
+                log.info("Synthetic generator user registered: email={}", properties.getAuthEmail());
+            } catch (RestClientResponseException regEx) {
+                if (regEx.getStatusCode().value() == 409) {
+                    log.debug("Synthetic generator user already registered (409 expected): email={}", properties.getAuthEmail());
+                } else {
+                    log.warn("Synthetic registration check returned HTTP {}", regEx.getStatusCode().value());
+                }
+            } catch (Exception ex) {
+                log.warn("Synthetic registration check skipped: {}", ex.getMessage());
+            }
+        }
+
+        try {
+            AuthResponse loginResp = restClient.post()
+                    .uri("/api/auth/login")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header(CorrelationHeaders.RUN_ID, ctx.runId())
+                    .header(CorrelationHeaders.JOURNEY_ID, ctx.journeyId())
+                    .body(new LoginRequest(properties.getAuthEmail(), properties.getAuthPassword()))
+                    .retrieve()
+                    .body(AuthResponse.class);
+            if (loginResp != null && loginResp.accessToken() != null && !loginResp.accessToken().isBlank()) {
+                return loginResp.accessToken();
+            }
+        } catch (Exception ex) {
+            log.warn("Synthetic login skipped or failed: {}", ex.getMessage());
+        }
+        return null;
     }
 
     private static JourneyState mapErrorCode(String errorCode) {

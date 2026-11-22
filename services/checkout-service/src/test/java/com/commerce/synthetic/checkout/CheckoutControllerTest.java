@@ -111,7 +111,7 @@ class CheckoutControllerTest {
                 .andExpect(jsonPath("$.status").value("PUBLISHED"))
                 .andExpect(jsonPath("$.payment_authorization_id").value("auth-123"));
 
-        verify(orderRepository).insertOrder(anyString(), anyString(), anyString(), anyString(), anyString());
+        verify(orderRepository).insertOrder(anyString(), anyString(), anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.nullable(String.class), anyInt());
         verify(orderRepository).updateOrderStatus(anyString(), org.mockito.ArgumentMatchers.eq("PUBLISHED"));
     }
 

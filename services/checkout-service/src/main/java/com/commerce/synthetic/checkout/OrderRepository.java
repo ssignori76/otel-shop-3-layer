@@ -1,5 +1,6 @@
 package com.commerce.synthetic.checkout;
 
+import com.commerce.synthetic.api.OrderSummaryResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -10,6 +11,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
 
 @Repository
 public class OrderRepository {
@@ -59,16 +61,45 @@ public class OrderRepository {
 
     @Transactional
     public void insertOrder(String orderId, String journeyId, String cartId, String paymentAuthId, String status) {
+        insertOrder(orderId, journeyId, cartId, paymentAuthId, status, null, 0);
+    }
+
+    @Transactional
+    public void insertOrder(String orderId, String journeyId, String cartId, String paymentAuthId, String status, String userId, int totalCents) {
         Timestamp now = Timestamp.from(Instant.now());
         jdbcTemplate.update(
-                "INSERT INTO orders (order_id, journey_id, cart_id, payment_authorization_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO orders (order_id, journey_id, cart_id, payment_authorization_id, status, user_id, total_cents, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 orderId,
                 journeyId,
                 cartId,
                 paymentAuthId,
                 status,
+                userId,
+                Math.max(0, totalCents),
                 now,
                 now
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderSummaryResponse> findOrdersByUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return List.of();
+        }
+        return jdbcTemplate.query(
+                "SELECT order_id, journey_id, cart_id, payment_authorization_id, status, total_cents, created_at, updated_at " +
+                        "FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
+                (rs, rowNum) -> new OrderSummaryResponse(
+                        rs.getString("order_id"),
+                        rs.getString("journey_id"),
+                        rs.getString("cart_id"),
+                        rs.getString("payment_authorization_id"),
+                        rs.getString("status"),
+                        rs.getInt("total_cents"),
+                        rs.getTimestamp("created_at").toInstant().toString(),
+                        rs.getTimestamp("updated_at").toInstant().toString()
+                ),
+                userId
         );
     }
 

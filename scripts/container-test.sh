@@ -10,7 +10,7 @@ run_unit_tests() {
     -f docker/java-service/Dockerfile \
     --target unit-test \
     --progress=plain \
-    -t commerce/unit-test-verify:1.0.0 \
+    -t commerce/unit-test-verify:2.0.0 \
     .
 }
 
@@ -29,7 +29,7 @@ run_e2e_tests() {
   echo "[e2e-test] Running full end-to-end test suite (Traces + Metrics + Logs)..."
   mkdir -p test/reports
   chmod 777 test/reports
-  ./scripts/compose-down.sh
+  REMOVE_VOLUMES=true ./scripts/compose-down.sh
   ./scripts/compose-up.sh test
   ./scripts/wait-ready.sh
   docker compose -f compose.yaml -f compose.test.yaml --profile e2e run --rm test-runner

@@ -280,6 +280,14 @@ public class GatewayJourneyController {
         if (baggage != null && !baggage.isBlank()) {
             target.set(CorrelationHeaders.BAGGAGE, baggage);
         }
+        String userId = incoming.getFirst(CorrelationHeaders.USER_ID);
+        if (userId != null && !userId.isBlank()) {
+            target.set(CorrelationHeaders.USER_ID, userId);
+        }
+        String userEmail = incoming.getFirst(CorrelationHeaders.USER_EMAIL);
+        if (userEmail != null && !userEmail.isBlank()) {
+            target.set(CorrelationHeaders.USER_EMAIL, userEmail);
+        }
     }
 
     private static JourneyState mapErrorCodeToState(String errorCode) {

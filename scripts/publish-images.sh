@@ -11,13 +11,14 @@ if ! grep -q '"overall_passed": true' test/reports/e2e-test-report.json; then
   exit 1
 fi
 
-APP_VERSION="${APP_VERSION:-1.0.0}"
+APP_VERSION="${APP_VERSION:-2.0.0}"
 LOCAL_REGISTRY="${IMAGE_REGISTRY:-commerce}"
 PUBLISH_REGISTRY="${PUBLISH_REGISTRY:-lusig76}"
 IMAGE_PREFIX="${IMAGE_PREFIX:-otel-shop-}"
 GIT_REVISION="$(git rev-parse --short HEAD 2>/dev/null || echo 'local')"
 
 IMAGES=(
+  "auth-service"
   "api-gateway"
   "cart-service"
   "checkout-service"

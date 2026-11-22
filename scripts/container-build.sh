@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_VERSION="${APP_VERSION:-1.0.0}"
+APP_VERSION="${APP_VERSION:-2.0.0}"
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-commerce}"
 GIT_REVISION="$(git rev-parse --short HEAD 2>/dev/null || echo 'local')"
 BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -9,6 +9,7 @@ BUILD_CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 export DOCKER_BUILDKIT=1
 
 SERVICES=(
+  "auth-service:services/auth-service:8086"
   "api-gateway:services/api-gateway:8080"
   "cart-service:services/cart-service:8081"
   "checkout-service:services/checkout-service:8082"
@@ -56,7 +57,7 @@ docker build \
   .
 
 echo "[build] Verifying non-root user configuration on all application images..."
-for img in api-gateway cart-service checkout-service merchant-service fulfillment-service journey-generator apache-web; do
+for img in auth-service api-gateway cart-service checkout-service merchant-service fulfillment-service journey-generator apache-web; do
   uid="$(docker run --rm --entrypoint id "${IMAGE_REGISTRY}/${img}:${APP_VERSION}" -u)"
   if [ "${uid}" = "0" ]; then
     echo "[ERROR] Image ${IMAGE_REGISTRY}/${img}:${APP_VERSION} runs as root (UID 0)!" >&2

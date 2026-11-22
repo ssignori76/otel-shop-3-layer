@@ -42,7 +42,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: checkout-service
-          image: commerce/checkout-service:1.0.0
+          image: commerce/checkout-service:2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

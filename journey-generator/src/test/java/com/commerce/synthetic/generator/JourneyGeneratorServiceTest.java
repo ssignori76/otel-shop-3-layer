@@ -43,6 +43,7 @@ class JourneyGeneratorServiceTest {
     void executesSingleJourneyAndTracksDelayBetweenRuns() {
         GeneratorProperties props = new GeneratorProperties();
         props.setEnabled(false);
+        props.setAuthEnabled(false);
         props.setScenarioName("NORMAL");
         props.setScenarioEnabled(false);
 

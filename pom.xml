@@ -13,7 +13,7 @@
 
     <groupId>com.commerce.synthetic</groupId>
     <artifactId>commerce-synthetic-parent</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
     <packaging>pom</packaging>
     <name>Commerce Synthetic Application</name>
     <description>Distributed synthetic e-commerce application with OpenTelemetry traces, metrics, and logs</description>
@@ -22,6 +22,7 @@
         <module>libs/scenario-contract</module>
         <module>libs/api-contract</module>
         <module>libs/messaging-contract</module>
+        <module>services/auth-service</module>
         <module>services/api-gateway</module>
         <module>services/cart-service</module>
         <module>services/checkout-service</module>

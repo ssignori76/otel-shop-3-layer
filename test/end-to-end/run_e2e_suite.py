@@ -510,6 +510,128 @@ def verify_otel_logs(known_journey_ids, known_trace_ids):
     )
 
 
+def verify_v2_spa_and_auth():
+    # 1. SPA root and History API fallback route served by Apache
+    st_root, txt_root = http_text(f"{APACHE_URL}/", timeout=10)
+    if st_root != 200 or "OTel Shop" not in txt_root:
+        return False, f"SPA root / failed: status={st_root}"
+
+    st_spa, txt_spa = http_text(f"{APACHE_URL}/login", timeout=10)
+    if st_spa != 200 or "OTel Shop" not in txt_spa:
+        return False, f"SPA fallback /login failed: status={st_spa}"
+
+    # 2. Public 3-product catalog from backend DB
+    st_prod, products = http_json(f"{APACHE_URL}/api/products", timeout=10)
+    if st_prod != 200:
+        return False, f"GET /api/products failed: status={st_prod}"
+    if not isinstance(products, list) or len(products) != 3:
+        return False, f"Expected 3 demo products, got {len(products) if isinstance(products, list) else products}"
+
+    # 3. Protected cart route must reject unauthenticated requests with 401
+    st_unauth, _ = http_json(f"{APACHE_URL}/api/carts/active", timeout=10)
+    if st_unauth != 401:
+        return False, f"Expected 401 on /api/carts/active without JWT, got {st_unauth}"
+
+    # 4. Demo user login
+    st_demo, body_demo = http_json(
+        f"{APACHE_URL}/api/auth/login",
+        method="POST",
+        payload={"email": "demo@otelshop.local", "password": "DemoPass123!"},
+        timeout=10,
+    )
+    if st_demo != 200 or not body_demo.get("access_token"):
+        return False, f"Demo user login failed: status={st_demo} body={body_demo}"
+
+    # 5. Register unique E2E user + verify duplicate conflict (409)
+    e2e_email = f"e2e-{uuid.uuid4().hex[:10]}@otelshop.local"
+    st_reg, body_reg = http_json(
+        f"{APACHE_URL}/api/auth/register",
+        method="POST",
+        payload={"full_name": "E2E Shopper", "email": e2e_email, "password": "E2ePassword123!"},
+        timeout=10,
+    )
+    if st_reg != 201 or not body_reg.get("access_token"):
+        return False, f"User registration failed: status={st_reg} body={body_reg}"
+    jwt_token = body_reg["access_token"]
+
+    st_dup, _ = http_json(
+        f"{APACHE_URL}/api/auth/register",
+        method="POST",
+        payload={"full_name": "E2E Dup", "email": e2e_email, "password": "E2ePassword123!"},
+        timeout=10,
+    )
+    if st_dup != 409:
+        return False, f"Expected 409 on duplicate email registration, got {st_dup}"
+
+    # 6. Full authenticated SPA cart -> checkout -> orders -> fulfillment loop
+    run_id = str(uuid.uuid4())
+    journey_id = str(uuid.uuid4())
+    auth_headers = {
+        "Authorization": f"Bearer {jwt_token}",
+        "x-run-id": run_id,
+        "x-journey-id": journey_id,
+    }
+
+    st_me, body_me = http_json(f"{APACHE_URL}/api/auth/me", headers=auth_headers, timeout=10)
+    if st_me != 200 or body_me.get("email") != e2e_email:
+        return False, f"GET /api/auth/me failed: status={st_me}"
+
+    first_sku = products[0]["sku"]
+    second_sku = products[1]["sku"]
+    st_cart, body_cart = http_json(
+        f"{APACHE_URL}/api/carts",
+        method="POST",
+        headers=auth_headers,
+        payload={"run_id": run_id, "journey_id": journey_id, "sku": first_sku, "quantity": 1},
+        timeout=10,
+    )
+    if st_cart != 201:
+        return False, f"Authenticated POST /api/carts failed: status={st_cart} body={body_cart}"
+    cart_id = body_cart["cart_id"]
+
+    st_add, body_add = http_json(
+        f"{APACHE_URL}/api/carts/{cart_id}/items",
+        method="POST",
+        headers=auth_headers,
+        payload={"sku": second_sku, "quantity": 1},
+        timeout=10,
+    )
+    if st_add != 200 or len(body_add.get("items", [])) != 2:
+        return False, f"POST /api/carts/{cart_id}/items failed: status={st_add} body={body_add}"
+    total_cents = body_add.get("total_cents", 0)
+
+    st_chk, body_chk = http_json(
+        f"{APACHE_URL}/api/checkouts",
+        method="POST",
+        headers=auth_headers,
+        payload={"run_id": run_id, "journey_id": journey_id, "cart_id": cart_id, "total_cents": total_cents},
+        timeout=15,
+    )
+    if st_chk != 202:
+        return False, f"Authenticated POST /api/checkouts failed: status={st_chk} body={body_chk}"
+    order_id = body_chk["order_id"]
+
+    http_json(f"{APACHE_URL}/api/carts/{cart_id}/complete", method="POST", headers=auth_headers, timeout=10)
+
+    st_orders, body_orders = http_json(f"{APACHE_URL}/api/orders", headers=auth_headers, timeout=10)
+    if st_orders != 200 or not any(o.get("order_id") == order_id for o in body_orders):
+        return False, f"GET /api/orders did not include order {order_id}"
+
+    # Poll GET /api/fulfillments/{order_id} until FULFILLED
+    fulfilled = False
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        st_ful, body_ful = http_json(f"{APACHE_URL}/api/fulfillments/{order_id}", headers=auth_headers, timeout=10)
+        if st_ful == 200 and body_ful.get("status") == "FULFILLED":
+            fulfilled = True
+            break
+        time.sleep(0.5)
+    if not fulfilled:
+        return False, f"Order {order_id} did not reach FULFILLED via GET /api/fulfillments/{order_id}"
+
+    return True, f"SPA + JWT auth + 3 products + 2-item cart + checkout ({order_id}) + FULFILLED loop verified"
+
+
 def main():
     os.makedirs(REPORT_DIR, exist_ok=True)
     report = {
@@ -737,6 +859,10 @@ def main():
     # Gate 12: OpenTelemetry Logs Validation
     l_ok, l_msg = verify_otel_logs(known_journey_ids, known_trace_ids)
     record_gate("Gate 12 - OpenTelemetry Logs (OTLP LogRecords + Trace/MDC Correlation)", l_ok, l_msg)
+
+    # Gate 13: v2.0 SPA Storefront, JWT Auth, Catalog, Cart, Checkout & Fulfillment Loop
+    v2_ok, v2_msg = verify_v2_spa_and_auth()
+    record_gate("Gate 13 - v2.0 SPA, JWT Auth, 3-Product Catalog, Cart & Fulfillment Loop", v2_ok, v2_msg)
 
     report["completed_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 

@@ -5,7 +5,7 @@ export PATH="${HOME}/.local/bin:${PATH}"
 ./scripts/k8s-ensure-tools.sh
 
 CLUSTER_NAME="${KIND_CLUSTER_NAME:-commerce-synthetic}"
-APP_VERSION="${APP_VERSION:-1.0.0}"
+APP_VERSION="${APP_VERSION:-2.0.0}"
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-commerce}"
 K8S_OVERLAY="${1:-${K8S_OVERLAY:-local-observability}}"
 
@@ -19,6 +19,7 @@ fi
 kubectl config use-context "kind-${CLUSTER_NAME}"
 
 IMAGES=(
+  "auth-service"
   "api-gateway"
   "cart-service"
   "checkout-service"
@@ -57,7 +58,7 @@ if [ "${K8S_OVERLAY}" = "local-observability" ]; then
 fi
 
 echo "[k8s-up] Waiting for commerce-core Deployments..."
-for svc in cart-service merchant-service checkout-service fulfillment-service; do
+for svc in auth-service cart-service merchant-service checkout-service fulfillment-service; do
   kubectl -n commerce-core rollout status "deployment/${svc}" --timeout=180s
 done
 

@@ -1,5 +1,7 @@
 package com.commerce.synthetic.gateway;
 
+import com.commerce.synthetic.api.JwtTokenProvider;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -12,6 +14,14 @@ import java.time.Duration;
 
 @Configuration
 public class GatewayClientConfig {
+
+    @Bean
+    public JwtTokenProvider jwtTokenProvider(
+            @Value("${commerce.auth.jwt-secret:commerce-local-dev-jwt-secret-key-2026-change-in-prod}") String jwtSecret,
+            ObjectMapper objectMapper
+    ) {
+        return new JwtTokenProvider(jwtSecret, 86400L, objectMapper);
+    }
 
     @Bean
     public WebClient cartWebClient(

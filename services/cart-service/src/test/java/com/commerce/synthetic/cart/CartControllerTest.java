@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
-        "spring.flyway.enabled=false"
+        "spring.flyway.enabled=true"
 })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -38,20 +38,12 @@ class CartControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Autowired
-    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
-
-    @org.junit.jupiter.api.BeforeEach
-    void initSchema() {
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS cart (
-                    cart_id VARCHAR(36) NOT NULL PRIMARY KEY,
-                    journey_id VARCHAR(36) NOT NULL UNIQUE,
-                    status VARCHAR(64) NOT NULL,
-                    created_at TIMESTAMP NOT NULL,
-                    updated_at TIMESTAMP NOT NULL
-                )
-                """);
+    @Test
+    void listsThreeDemoProductsFromDatabase() throws Exception {
+        mockMvc.perform(get("/internal/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].sku").isNotEmpty());
     }
 
     @Test

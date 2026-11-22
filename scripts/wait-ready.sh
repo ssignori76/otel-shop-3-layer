@@ -7,6 +7,7 @@ START_TS="$(date +%s)"
 CONTAINERS=(
   "commerce-mysql"
   "commerce-rabbitmq"
+  "commerce-auth-service"
   "commerce-cart-service"
   "commerce-merchant-service"
   "commerce-checkout-service"

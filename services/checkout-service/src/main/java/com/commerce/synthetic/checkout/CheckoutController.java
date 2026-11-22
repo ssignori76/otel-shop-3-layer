@@ -76,7 +76,8 @@ public class CheckoutController {
             @RequestHeader(value = CorrelationHeaders.RUN_ID, required = false) String headerRunId,
             @RequestHeader(value = CorrelationHeaders.JOURNEY_ID, required = false) String headerJourneyId,
             @RequestHeader(value = CorrelationHeaders.SIMULATION_SCENARIO, required = false) String headerScenario,
-            @RequestHeader(value = CorrelationHeaders.SIMULATION_ENABLED, required = false) String headerEnabled
+            @RequestHeader(value = CorrelationHeaders.SIMULATION_ENABLED, required = false) String headerEnabled,
+            @RequestHeader(value = CorrelationHeaders.USER_ID, required = false) String userId
     ) {
         long startNanos = System.nanoTime();
         String runId = headerRunId != null && !headerRunId.isBlank() ? headerRunId : request.runId();
@@ -157,12 +158,16 @@ public class CheckoutController {
             // 4. Persist order in checkout_db.orders
             String orderId = UUID.randomUUID().toString();
             TelemetryHelper.bindEntityIds(request.cartId(), orderId, null);
+            String normalizedUserId = (userId != null && !userId.isBlank()) ? userId.trim() : null;
+            int totalCents = request.totalCents() != null ? request.totalCents() : 0;
             orderRepository.insertOrder(
                     orderId,
                     ctx.journeyId(),
                     request.cartId(),
                     paymentResponse.paymentAuthorizationId(),
-                    JourneyState.PAYMENT_AUTHORIZED.name()
+                    JourneyState.PAYMENT_AUTHORIZED.name(),
+                    normalizedUserId,
+                    totalCents
             );
 
             // 5. Publish order message to RabbitMQ using publisher confirms

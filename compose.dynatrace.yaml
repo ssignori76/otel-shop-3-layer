@@ -1,6 +1,6 @@
 services:
   otel-collector:
-    image: ${IMAGE_REGISTRY:-commerce}/otel-collector:${APP_VERSION:-1.0.0}
+    image: ${IMAGE_REGISTRY:-commerce}/otel-collector:${APP_VERSION:-2.0.0}
     build:
       context: .
       dockerfile: docker/otel-collector/Dockerfile
@@ -15,7 +15,7 @@ services:
 
   cart-service:
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -24,7 +24,7 @@ services:
 
   merchant-service:
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -33,7 +33,7 @@ services:
 
   checkout-service:
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -42,7 +42,7 @@ services:
 
   fulfillment-service:
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -51,7 +51,7 @@ services:
 
   api-gateway:
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -60,7 +60,7 @@ services:
 
   journey-generator:
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp

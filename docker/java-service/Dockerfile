@@ -16,6 +16,7 @@ COPY pom.xml ./
 COPY libs/scenario-contract/pom.xml libs/scenario-contract/pom.xml
 COPY libs/api-contract/pom.xml libs/api-contract/pom.xml
 COPY libs/messaging-contract/pom.xml libs/messaging-contract/pom.xml
+COPY services/auth-service/pom.xml services/auth-service/pom.xml
 COPY services/api-gateway/pom.xml services/api-gateway/pom.xml
 COPY services/cart-service/pom.xml services/cart-service/pom.xml
 COPY services/checkout-service/pom.xml services/checkout-service/pom.xml
@@ -67,7 +68,7 @@ RUN --mount=type=cache,target=/root/.m2 \
 FROM eclipse-temurin:21.0.5_11-jre-alpine AS runtime
 
 ARG APP_NAME=commerce-java-service
-ARG APP_VERSION=1.0.0
+ARG APP_VERSION=2.0.0
 ARG GIT_REVISION=dev
 ARG BUILD_CREATED=2026-11-15T00:00:00Z
 ARG SERVER_PORT=8080

@@ -26,7 +26,7 @@ down:
 	./scripts/compose-down.sh
 
 clean:
-	./scripts/compose-down.sh
+	REMOVE_VOLUMES=true ./scripts/compose-down.sh
 	rm -rf test/reports/*.json test/reports/*.txt test/reports/*.xml
 
 publish:

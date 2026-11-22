@@ -16,7 +16,7 @@ services:
       start_period: 5s
 
   otel-collector:
-    image: ${IMAGE_REGISTRY:-commerce}/otel-collector:${APP_VERSION:-1.0.0}
+    image: ${IMAGE_REGISTRY:-commerce}/otel-collector:${APP_VERSION:-2.0.0}
     build:
       context: .
       dockerfile: docker/otel-collector/Dockerfile
@@ -30,6 +30,21 @@ services:
     networks:
       - commerce-net
 
+  auth-service:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-2.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_METRIC_EXPORT_INTERVAL: 2000
+
   cart-service:
     depends_on:
       mysql:
@@ -37,7 +52,7 @@ services:
       otel-collector:
         condition: service_healthy
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -50,7 +65,7 @@ services:
       otel-collector:
         condition: service_healthy
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -69,7 +84,7 @@ services:
       otel-collector:
         condition: service_healthy
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -86,7 +101,7 @@ services:
       otel-collector:
         condition: service_healthy
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -96,6 +111,8 @@ services:
 
   api-gateway:
     depends_on:
+      auth-service:
+        condition: service_healthy
       cart-service:
         condition: service_healthy
       checkout-service:
@@ -105,7 +122,7 @@ services:
       otel-collector:
         condition: service_healthy
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -124,7 +141,7 @@ services:
       otel-collector:
         condition: service_healthy
     environment:
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=test,service.version=${APP_VERSION:-2.0.0}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: otlp
@@ -133,7 +150,7 @@ services:
       OTEL_METRIC_EXPORT_INTERVAL: 2000
 
   test-runner:
-    image: ${IMAGE_REGISTRY:-commerce}/test-runner:${APP_VERSION:-1.0.0}
+    image: ${IMAGE_REGISTRY:-commerce}/test-runner:${APP_VERSION:-2.0.0}
     build:
       context: .
       dockerfile: test/Dockerfile

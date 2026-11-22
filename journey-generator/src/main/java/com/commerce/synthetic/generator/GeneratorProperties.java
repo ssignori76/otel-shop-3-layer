@@ -19,6 +19,11 @@ public class GeneratorProperties {
     private String targetBaseUrl = "http://apache-web:80";
     private String scenarioName = "NORMAL";
     private boolean scenarioEnabled = false;
+    private boolean authEnabled = true;
+    private String authEmail = "synthetic@otelshop.local";
+    private String authFullName = "Synthetic Journey Bot";
+    private String authPassword = "SynthPass123!";
+    private String staticToken = "";
 
     @PostConstruct
     public void validate() {
@@ -117,5 +122,45 @@ public class GeneratorProperties {
 
     public void setScenarioEnabled(boolean scenarioEnabled) {
         this.scenarioEnabled = scenarioEnabled;
+    }
+
+    public boolean isAuthEnabled() {
+        return authEnabled;
+    }
+
+    public void setAuthEnabled(boolean authEnabled) {
+        this.authEnabled = authEnabled;
+    }
+
+    public String getAuthEmail() {
+        return authEmail;
+    }
+
+    public void setAuthEmail(String authEmail) {
+        this.authEmail = authEmail;
+    }
+
+    public String getAuthFullName() {
+        return authFullName;
+    }
+
+    public void setAuthFullName(String authFullName) {
+        this.authFullName = authFullName;
+    }
+
+    public String getAuthPassword() {
+        return authPassword;
+    }
+
+    public void setAuthPassword(String authPassword) {
+        this.authPassword = authPassword;
+    }
+
+    public String getStaticToken() {
+        return staticToken;
+    }
+
+    public void setStaticToken(String staticToken) {
+        this.staticToken = staticToken;
     }
 }

@@ -1,8 +1,8 @@
 FROM httpd:2.4.62-alpine
 
-ARG APP_VERSION=1.0.0
+ARG APP_VERSION=2.0.0
 ARG GIT_REVISION=dev
-ARG BUILD_CREATED=2026-11-15T00:00:00Z
+ARG BUILD_CREATED=2026-11-22T00:00:00Z
 
 LABEL org.opencontainers.image.title="commerce-apache-web" \
       org.opencontainers.image.version="${APP_VERSION}" \
@@ -17,6 +17,7 @@ RUN apk add --no-cache libcap && \
 
 COPY docker/apache/httpd.conf /usr/local/apache2/conf/httpd.conf
 COPY docker/apache/conf.d/reverse-proxy.conf /usr/local/apache2/conf/conf.d/reverse-proxy.conf
+COPY --chown=www-data:www-data frontend/ /usr/local/apache2/htdocs/
 
 USER www-data:www-data
 

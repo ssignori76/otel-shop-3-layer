@@ -10,6 +10,8 @@ services:
       - --default-time-zone=+00:00
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_local_dev_only}
+      MYSQL_AUTH_USER: ${MYSQL_AUTH_USER:-auth_app}
+      MYSQL_AUTH_PASSWORD: ${MYSQL_AUTH_PASSWORD:-auth_local_dev_only}
       MYSQL_CART_USER: ${MYSQL_CART_USER:-cart_app}
       MYSQL_CART_PASSWORD: ${MYSQL_CART_PASSWORD:-cart_local_dev_only}
       MYSQL_CHECKOUT_USER: ${MYSQL_CHECKOUT_USER:-checkout_app}
@@ -45,15 +47,51 @@ services:
       retries: 20
       start_period: 10s
 
+  auth-service:
+    image: ${IMAGE_REGISTRY:-commerce}/auth-service:${APP_VERSION:-2.0.0}
+    build:
+      context: .
+      dockerfile: docker/java-service/Dockerfile
+      args:
+        MODULE_PATH: services/auth-service
+        APP_NAME: auth-service
+        APP_VERSION: ${APP_VERSION:-2.0.0}
+        SERVER_PORT: 8086
+    container_name: commerce-auth-service
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8086
+      AUTH_DB_URL: jdbc:mysql://mysql:3306/auth_db?serverTimezone=UTC&characterEncoding=utf8
+      MYSQL_AUTH_USER: ${MYSQL_AUTH_USER:-auth_app}
+      MYSQL_AUTH_PASSWORD: ${MYSQL_AUTH_PASSWORD:-auth_local_dev_only}
+      JWT_SECRET: ${JWT_SECRET:-commerce-local-dev-jwt-secret-key-2026-change-in-prod}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-86400}
+      DEMO_USER_ENABLED: ${DEMO_USER_ENABLED:-true}
+      DEMO_USER_EMAIL: ${DEMO_USER_EMAIL:-demo@otelshop.local}
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:-DemoPass123!}
+      SCENARIO_NAME: ${SCENARIO_NAME:-NORMAL}
+      SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
+      OTEL_SERVICE_NAME: auth-service
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-2.0.0}
+      OTEL_PROPAGATORS: tracecontext,baggage
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-none}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+    networks:
+      - commerce-net
+
   cart-service:
-    image: ${IMAGE_REGISTRY:-commerce}/cart-service:${APP_VERSION:-1.0.0}
+    image: ${IMAGE_REGISTRY:-commerce}/cart-service:${APP_VERSION:-2.0.0}
     build:
       context: .
       dockerfile: docker/java-service/Dockerfile
       args:
         MODULE_PATH: services/cart-service
         APP_NAME: cart-service
-        APP_VERSION: ${APP_VERSION:-1.0.0}
+        APP_VERSION: ${APP_VERSION:-2.0.0}
         SERVER_PORT: 8081
     container_name: commerce-cart-service
     depends_on:
@@ -67,7 +105,7 @@ services:
       SCENARIO_NAME: ${SCENARIO_NAME:-NORMAL}
       SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
       OTEL_SERVICE_NAME: cart-service
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-2.0.0}
       OTEL_PROPAGATORS: tracecontext,baggage
       OTEL_TRACES_SAMPLER: always_on
       OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
@@ -77,14 +115,14 @@ services:
       - commerce-net
 
   merchant-service:
-    image: ${IMAGE_REGISTRY:-commerce}/merchant-service:${APP_VERSION:-1.0.0}
+    image: ${IMAGE_REGISTRY:-commerce}/merchant-service:${APP_VERSION:-2.0.0}
     build:
       context: .
       dockerfile: docker/java-service/Dockerfile
       args:
         MODULE_PATH: services/merchant-service
         APP_NAME: merchant-service
-        APP_VERSION: ${APP_VERSION:-1.0.0}
+        APP_VERSION: ${APP_VERSION:-2.0.0}
         SERVER_PORT: 8083
     container_name: commerce-merchant-service
     environment:
@@ -93,7 +131,7 @@ services:
       SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
       MERCHANT_TIMEOUT_MS: ${MERCHANT_TIMEOUT_MS:-1500}
       OTEL_SERVICE_NAME: merchant-service
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-2.0.0}
       OTEL_PROPAGATORS: tracecontext,baggage
       OTEL_TRACES_SAMPLER: always_on
       OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
@@ -103,14 +141,14 @@ services:
       - commerce-net
 
   checkout-service:
-    image: ${IMAGE_REGISTRY:-commerce}/checkout-service:${APP_VERSION:-1.0.0}
+    image: ${IMAGE_REGISTRY:-commerce}/checkout-service:${APP_VERSION:-2.0.0}
     build:
       context: .
       dockerfile: docker/java-service/Dockerfile
       args:
         MODULE_PATH: services/checkout-service
         APP_NAME: checkout-service
-        APP_VERSION: ${APP_VERSION:-1.0.0}
+        APP_VERSION: ${APP_VERSION:-2.0.0}
         SERVER_PORT: 8082
     container_name: commerce-checkout-service
     depends_on:
@@ -137,7 +175,7 @@ services:
       MERCHANT_TIMEOUT_MS: ${MERCHANT_TIMEOUT_MS:-1500}
       BROKER_PUBLISH_TIMEOUT_MS: ${BROKER_PUBLISH_TIMEOUT_MS:-1500}
       OTEL_SERVICE_NAME: checkout-service
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-2.0.0}
       OTEL_PROPAGATORS: tracecontext,baggage
       OTEL_TRACES_SAMPLER: always_on
       OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
@@ -147,14 +185,14 @@ services:
       - commerce-net
 
   fulfillment-service:
-    image: ${IMAGE_REGISTRY:-commerce}/fulfillment-service:${APP_VERSION:-1.0.0}
+    image: ${IMAGE_REGISTRY:-commerce}/fulfillment-service:${APP_VERSION:-2.0.0}
     build:
       context: .
       dockerfile: docker/java-service/Dockerfile
       args:
         MODULE_PATH: services/fulfillment-service
         APP_NAME: fulfillment-service
-        APP_VERSION: ${APP_VERSION:-1.0.0}
+        APP_VERSION: ${APP_VERSION:-2.0.0}
         SERVER_PORT: 8084
     container_name: commerce-fulfillment-service
     depends_on:
@@ -175,7 +213,7 @@ services:
       SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
       FULFILLMENT_ERROR_AFTER_MS: ${FULFILLMENT_ERROR_AFTER_MS:-100}
       OTEL_SERVICE_NAME: fulfillment-service
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-2.0.0}
       OTEL_PROPAGATORS: tracecontext,baggage
       OTEL_TRACES_SAMPLER: always_on
       OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
@@ -185,17 +223,19 @@ services:
       - commerce-net
 
   api-gateway:
-    image: ${IMAGE_REGISTRY:-commerce}/api-gateway:${APP_VERSION:-1.0.0}
+    image: ${IMAGE_REGISTRY:-commerce}/api-gateway:${APP_VERSION:-2.0.0}
     build:
       context: .
       dockerfile: docker/java-service/Dockerfile
       args:
         MODULE_PATH: services/api-gateway
         APP_NAME: api-gateway
-        APP_VERSION: ${APP_VERSION:-1.0.0}
+        APP_VERSION: ${APP_VERSION:-2.0.0}
         SERVER_PORT: 8080
     container_name: commerce-api-gateway
     depends_on:
+      auth-service:
+        condition: service_healthy
       cart-service:
         condition: service_healthy
       checkout-service:
@@ -204,12 +244,16 @@ services:
         condition: service_healthy
     environment:
       SERVER_PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:8086
       CART_SERVICE_URL: http://cart-service:8081
       CHECKOUT_SERVICE_URL: http://checkout-service:8082
+      FULFILLMENT_SERVICE_URL: http://fulfillment-service:8084
+      JWT_SECRET: ${JWT_SECRET:-commerce-local-dev-jwt-secret-key-2026-change-in-prod}
+      GENERATOR_STATIC_TOKEN: ${GENERATOR_STATIC_TOKEN:-}
       SCENARIO_NAME: ${SCENARIO_NAME:-NORMAL}
       SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
       OTEL_SERVICE_NAME: api-gateway
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-2.0.0}
       OTEL_PROPAGATORS: tracecontext,baggage
       OTEL_TRACES_SAMPLER: always_on
       OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}
@@ -219,12 +263,12 @@ services:
       - commerce-net
 
   apache-web:
-    image: ${IMAGE_REGISTRY:-commerce}/apache-web:${APP_VERSION:-1.0.0}
+    image: ${IMAGE_REGISTRY:-commerce}/apache-web:${APP_VERSION:-2.0.0}
     build:
       context: .
       dockerfile: docker/apache/Dockerfile
       args:
-        APP_VERSION: ${APP_VERSION:-1.0.0}
+        APP_VERSION: ${APP_VERSION:-2.0.0}
     container_name: commerce-apache-web
     depends_on:
       api-gateway:
@@ -235,14 +279,14 @@ services:
       - commerce-net
 
   journey-generator:
-    image: ${IMAGE_REGISTRY:-commerce}/journey-generator:${APP_VERSION:-1.0.0}
+    image: ${IMAGE_REGISTRY:-commerce}/journey-generator:${APP_VERSION:-2.0.0}
     build:
       context: .
       dockerfile: docker/java-service/Dockerfile
       args:
         MODULE_PATH: journey-generator
         APP_NAME: journey-generator
-        APP_VERSION: ${APP_VERSION:-1.0.0}
+        APP_VERSION: ${APP_VERSION:-2.0.0}
         SERVER_PORT: 8085
     container_name: commerce-journey-generator
     depends_on:
@@ -260,10 +304,14 @@ services:
       GENERATOR_MAX_JOURNEYS: ${GENERATOR_MAX_JOURNEYS:-0}
       GENERATOR_STOP_ON_UNEXPECTED_ERROR: ${GENERATOR_STOP_ON_UNEXPECTED_ERROR:-false}
       GENERATOR_TARGET_URL: http://apache-web:80
+      GENERATOR_AUTH_ENABLED: ${GENERATOR_AUTH_ENABLED:-true}
+      GENERATOR_AUTH_EMAIL: ${GENERATOR_AUTH_EMAIL:-synthetic@otelshop.local}
+      GENERATOR_AUTH_PASSWORD: ${GENERATOR_AUTH_PASSWORD:-SynthPass123!}
+      GENERATOR_STATIC_TOKEN: ${GENERATOR_STATIC_TOKEN:-}
       SCENARIO_NAME: ${SCENARIO_NAME:-NORMAL}
       SCENARIO_ENABLED: ${SCENARIO_ENABLED:-false}
       OTEL_SERVICE_NAME: journey-generator
-      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-1.0.0}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=${OTEL_SERVICE_NAMESPACE:-commerce-synthetic},deployment.environment.name=${OTEL_DEPLOYMENT_ENVIRONMENT:-local},service.version=${APP_VERSION:-2.0.0}
       OTEL_PROPAGATORS: tracecontext,baggage
       OTEL_TRACES_SAMPLER: always_on
       OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-none}

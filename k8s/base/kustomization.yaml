@@ -6,6 +6,7 @@ resources:
   - data/mysql.yaml
   - data/rabbitmq.yaml
   - core/config.yaml
+  - core/auth-service.yaml
   - core/cart-service.yaml
   - core/merchant-service.yaml
   - core/checkout-service.yaml

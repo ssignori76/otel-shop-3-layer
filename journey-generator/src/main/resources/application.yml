@@ -20,6 +20,11 @@ commerce:
     target-base-url: ${GENERATOR_TARGET_URL:http://apache-web:80}
     scenario-name: ${SCENARIO_NAME:NORMAL}
     scenario-enabled: ${SCENARIO_ENABLED:false}
+    auth-enabled: ${GENERATOR_AUTH_ENABLED:true}
+    auth-email: ${GENERATOR_AUTH_EMAIL:synthetic@otelshop.local}
+    auth-full-name: ${GENERATOR_AUTH_FULL_NAME:Synthetic Journey Bot}
+    auth-password: ${GENERATOR_AUTH_PASSWORD:SynthPass123!}
+    static-token: ${GENERATOR_STATIC_TOKEN:}
 
 management:
   endpoints:

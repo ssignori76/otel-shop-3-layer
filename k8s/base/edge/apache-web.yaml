@@ -27,6 +27,7 @@ data:
     LoadModule proxy_http_module modules/mod_proxy_http.so
     LoadModule unixd_module modules/mod_unixd.so
     LoadModule alias_module modules/mod_alias.so
+    LoadModule dir_module modules/mod_dir.so
 
     ServerAdmin ops@commerce.local
     ServerName apache-web:8080
@@ -34,10 +35,12 @@ data:
     ServerSignature Off
 
     DocumentRoot "/usr/local/apache2/htdocs"
+    DirectoryIndex index.html
     <Directory "/usr/local/apache2/htdocs">
         Options None
         AllowOverride None
         Require all granted
+        FallbackResource /index.html
     </Directory>
 
     ErrorLog /dev/stderr
@@ -95,7 +98,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: apache-web
-          image: commerce/apache-web:1.0.0
+          image: commerce/apache-web:2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

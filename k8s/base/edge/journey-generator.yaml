@@ -42,7 +42,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: journey-generator
-          image: commerce/journey-generator:1.0.0
+          image: commerce/journey-generator:2.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -55,6 +55,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: commerce-edge-config
+            - secretRef:
+                name: commerce-edge-secrets
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
