@@ -95,39 +95,71 @@ Per il catalogo completo di metriche, attributi e formati log vedere [`docs/metr
 
 ---
 
-## 5. Come si Utilizza (Quick Start)
+## 5. Come si Utilizza
+
+Il progetto supporta **due modalità operative nettamente separate**: un ambiente locale di sviluppo/test autosufficiente con stack di osservabilità open-source, e un ambiente reale pensato per cluster monitorati da **Dynatrace**.
 
 **Prerequisiti sull'host**: solo **Docker Engine**, **Docker Compose** e **Git** (nessun JDK o Maven locale richiesto).
 
-### A. Docker Compose (Locale)
+---
+
+### Parte A — Ambiente di Sviluppo e Test (con Stack di Observability Locale)
+
+Include lo stack di osservabilità open-source locale per ispezionare e verificare automaticamente **Span (Jaeger)**, **Metriche (VictoriaMetrics / Prometheus)** e **Log (VictoriaLogs + Fluent Bit / OTLP)** senza dipendenze esterne.
+
+#### 1. Avvio e Test su Docker Compose
 ```bash
 make test       # Esegue unit test, build immagini non-root e suite E2E completa (Gate 1–12)
-make up         # Avvia lo stack completo con Jaeger e OTel Collector
+make up         # Avvia lo stack applicativo + Jaeger + OTel Collector
 make down       # Ferma e rimuove container e volumi effimeri
 ```
 
-### B. Kubernetes Locale con `kind` (Con Osservabilità Completa)
-Installa automaticamente `kind` e `kubectl` in `~/.local/bin` (senza sporcare il sistema), crea il cluster `commerce-synthetic` con 4 namespace e verifica tutti i gate:
+#### 2. Avvio e Test su Kubernetes Locale (`kind`)
+Installa automaticamente `kind` e `kubectl` in `~/.local/bin` (zero modifiche di sistema), crea il cluster `commerce-synthetic` con **4 namespace** (`commerce-edge`, `commerce-core`, `commerce-data`, `commerce-observability`), carica le immagini locali ed esegue tutti i test E2E dentro il cluster:
 ```bash
 make build      # Costruisce le immagini locali (se non già presenti)
-make k8s-up     # Avvia kind con overlay local-observability (4 namespace)
+make k8s-up     # Avvia kind con overlay k8s/overlays/local-observability (4 namespace)
 make k8s-test   # Valida overlay dynatrace-ready ed esegue il Job E2E su kind
 make k8s-down   # Elimina il cluster kind
 ```
-**UI locali esposte dal cluster `kind`**:
-- **Apache Entry Point**: `http://localhost:18080/healthz`
-- **Jaeger (Traces)**: `http://localhost:16686`
-- **VictoriaMetrics (Metrics)**: `http://localhost:18428/vmui`
-- **VictoriaLogs (Logs)**: `http://localhost:19428/select/vmui`
 
-### C. Cluster Kubernetes Remoto con Dynatrace (Senza Osservabilità Locale)
-L'overlay [`k8s/overlays/dynatrace-ready`](k8s/overlays/dynatrace-ready/kustomization.yaml) installa **solo** i 3 namespace applicativi (`commerce-edge`, `commerce-core`, `commerce-data`), usa le immagini pubbliche su Docker Hub (`docker.io/lusig76/otel-shop-*:1.0.0`) e disabilita l'OTel Java Agent locale per lasciare campo libero a **Dynatrace Operator / OneAgent**:
+**Endpoint e UI locali esposti dal cluster `kind`**:
+- **Apache Entry Point**: `http://localhost:18080/healthz`
+- **Jaeger UI (Traces)**: `http://localhost:16686`
+- **VictoriaMetrics UI (Metrics)**: `http://localhost:18428/vmui`
+- **VictoriaLogs UI (Logs)**: `http://localhost:19428/select/vmui`
+
+---
+
+### Parte B — Ambiente Reale con Dynatrace (senza Stack di Observability Locale)
+
+Pensato per l'installazione su un **cluster Kubernetes reale** (o host Docker) già monitorato da **Dynatrace**, escludendo completamente Jaeger, VictoriaMetrics, VictoriaLogs, Fluent Bit e il namespace `commerce-observability`.
+
+#### 1. Deploy su Cluster Kubernetes con Dynatrace
+L'overlay [`k8s/overlays/dynatrace-ready`](k8s/overlays/dynatrace-ready/kustomization.yaml):
+- Deploya **esclusivamente** i 3 namespace applicativi: `commerce-edge`, `commerce-core`, `commerce-data`.
+- Scarica direttamente da Docker Hub le immagini pubblicate (`docker.io/lusig76/otel-shop-*:1.0.0`), senza bisogno di build locale o `kind load`.
+- **Modalità A (Default — Dynatrace OneAgent)**: disabilita l'OTel Java Agent integrato (`JAVA_TOOL_OPTIONS=""`) evitando sovrapposizioni sulla JVM con Dynatrace Operator / OneAgent.
+- **Modalità B (Alternativa — Dynatrace OTLP Ingest)**: consente di mantenere l'OTel Java Agent inviando Traces, Metrics e Logs direttamente all'endpoint OTLP Dynatrace (vedi [`docs/kubernetes-deployment.md`](docs/kubernetes-deployment.md)).
+
 ```bash
+# Anteprima dei manifest generati (verifica assenza risorse observability locali)
+make k8s-render-dynatrace
+
+# Applicazione sul cluster Kubernetes target
 kubectl apply -k k8s/overlays/dynatrace-ready
 ```
 
-### Immagini Pubblicate su Docker Hub (`lusig76`)
-Tutte le immagini sono pubblicate con tag semantico (`1.0.0`) e short Git SHA (mai `latest`):
+#### 2. Deploy su Docker Compose con Dynatrace OTLP
+Utilizza [`compose.dynatrace.yaml`](compose.dynatrace.yaml) e [`observability/dynatrace/otel-collector-dynatrace.yaml`](observability/dynatrace/otel-collector-dynatrace.yaml) (con processore `cumulativetodelta` per le metriche):
+```bash
+export DT_OTLP_ENDPOINT="https://<environment-id>.live.dynatrace.com/api/v2/otlp"
+export DT_API_TOKEN="<dynatrace-ingest-token>"
+./scripts/compose-up.sh dynatrace
+```
+
+#### Immagini Pubblicate su Docker Hub (`lusig76`)
+Tutte le immagini usate in ambiente reale sono pubblicate con tag semantico (`1.0.0`) e short Git SHA (mai `latest`):
 `lusig76/otel-shop-apache-web`, `lusig76/otel-shop-api-gateway`, `lusig76/otel-shop-cart-service`, `lusig76/otel-shop-checkout-service`, `lusig76/otel-shop-merchant-service`, `lusig76/otel-shop-fulfillment-service`, `lusig76/otel-shop-journey-generator`, `lusig76/otel-shop-otel-collector`, `lusig76/otel-shop-test-runner`.
 
 ---
