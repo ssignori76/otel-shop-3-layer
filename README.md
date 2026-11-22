@@ -211,7 +211,21 @@ Two Kustomize overlays are provided:
   - Jaeger UI: `http://localhost:16686`
   - VictoriaMetrics UI: `http://localhost:18428/vmui`
   - VictoriaLogs UI: `http://localhost:19428/select/vmui`
-- **`k8s/overlays/dynatrace-ready`**: Deploys **only** `commerce-edge`, `commerce-core`, and `commerce-data` (zero local observability pods) and disables the bundled OTel Java Agent (`JAVA_TOOL_OPTIONS=""`) so Dynatrace Operator / OneAgent can instrument the cluster without double-agent conflicts.
+- **`k8s/overlays/dynatrace-ready`**: Deploys **only** `commerce-edge`, `commerce-core`, and `commerce-data` (zero local observability pods), rewrites image references to the published Docker Hub repositories (`docker.io/lusig76/otel-shop-*:1.0.0`), and disables the bundled OTel Java Agent (`JAVA_TOOL_OPTIONS=""`) so Dynatrace Operator / OneAgent can instrument the cluster without double-agent conflicts.
+
+### Published Docker Hub Images (`lusig76`)
+
+All images are published with semantic version (`1.0.0`) and short Git commit SHA tags (never `latest`):
+
+- `docker.io/lusig76/otel-shop-apache-web:1.0.0`
+- `docker.io/lusig76/otel-shop-api-gateway:1.0.0`
+- `docker.io/lusig76/otel-shop-cart-service:1.0.0`
+- `docker.io/lusig76/otel-shop-checkout-service:1.0.0`
+- `docker.io/lusig76/otel-shop-merchant-service:1.0.0`
+- `docker.io/lusig76/otel-shop-fulfillment-service:1.0.0`
+- `docker.io/lusig76/otel-shop-journey-generator:1.0.0`
+- `docker.io/lusig76/otel-shop-otel-collector:1.0.0`
+- `docker.io/lusig76/otel-shop-test-runner:1.0.0`
 
 ### Dynatrace OTLP Mode (Docker Compose)
 

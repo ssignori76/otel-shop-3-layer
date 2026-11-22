@@ -12,7 +12,9 @@ if ! grep -q '"overall_passed": true' test/reports/e2e-test-report.json; then
 fi
 
 APP_VERSION="${APP_VERSION:-1.0.0}"
-IMAGE_REGISTRY="${IMAGE_REGISTRY:-commerce}"
+LOCAL_REGISTRY="${IMAGE_REGISTRY:-commerce}"
+PUBLISH_REGISTRY="${PUBLISH_REGISTRY:-lusig76}"
+IMAGE_PREFIX="${IMAGE_PREFIX:-otel-shop-}"
 GIT_REVISION="$(git rev-parse --short HEAD 2>/dev/null || echo 'local')"
 
 IMAGES=(
@@ -23,14 +25,28 @@ IMAGES=(
   "fulfillment-service"
   "journey-generator"
   "apache-web"
+  "otel-collector"
+  "test-runner"
 )
 
 for img in "${IMAGES[@]}"; do
-  echo "[publish] Pushing ${IMAGE_REGISTRY}/${img}:${APP_VERSION} and ${IMAGE_REGISTRY}/${img}:${GIT_REVISION}..."
+  local_ref="${LOCAL_REGISTRY}/${img}:${APP_VERSION}"
+  remote_ver="${PUBLISH_REGISTRY}/${IMAGE_PREFIX}${img}:${APP_VERSION}"
+  remote_sha="${PUBLISH_REGISTRY}/${IMAGE_PREFIX}${img}:${GIT_REVISION}"
+
+  if ! docker image inspect "${local_ref}" >/dev/null 2>&1; then
+    echo "[ERROR] Local image ${local_ref} not found. Run 'make build' first." >&2
+    exit 1
+  fi
+
+  docker tag "${local_ref}" "${remote_ver}"
+  docker tag "${local_ref}" "${remote_sha}"
+
   if [ "${DRY_RUN:-true}" = "true" ]; then
-    echo "[publish] DRY_RUN=true: verified image ${IMAGE_REGISTRY}/${img}:${APP_VERSION} ready for push"
+    echo "[publish] DRY_RUN=true: tagged ${remote_ver} and ${remote_sha} (ready for push)"
   else
-    docker push "${IMAGE_REGISTRY}/${img}:${APP_VERSION}"
-    docker push "${IMAGE_REGISTRY}/${img}:${GIT_REVISION}"
+    echo "[publish] Pushing ${remote_ver} and ${remote_sha}..."
+    docker push "${remote_ver}"
+    docker push "${remote_sha}"
   fi
 done

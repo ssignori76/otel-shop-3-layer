@@ -4,8 +4,33 @@ kind: Kustomization
 # Dynatrace-ready overlay:
 # Deploys ONLY the 3 application namespaces (commerce-edge, commerce-core, commerce-data).
 # Excludes commerce-observability, Jaeger, VictoriaMetrics, VictoriaLogs, and Fluent Bit.
+# Uses published Docker Hub images under lusig76/otel-shop-* so remote Kubernetes clusters
+# can pull directly without local kind image loading.
 resources:
   - ../../base
+
+images:
+  - name: commerce/api-gateway
+    newName: docker.io/lusig76/otel-shop-api-gateway
+    newTag: 1.0.0
+  - name: commerce/cart-service
+    newName: docker.io/lusig76/otel-shop-cart-service
+    newTag: 1.0.0
+  - name: commerce/checkout-service
+    newName: docker.io/lusig76/otel-shop-checkout-service
+    newTag: 1.0.0
+  - name: commerce/merchant-service
+    newName: docker.io/lusig76/otel-shop-merchant-service
+    newTag: 1.0.0
+  - name: commerce/fulfillment-service
+    newName: docker.io/lusig76/otel-shop-fulfillment-service
+    newTag: 1.0.0
+  - name: commerce/journey-generator
+    newName: docker.io/lusig76/otel-shop-journey-generator
+    newTag: 1.0.0
+  - name: commerce/apache-web
+    newName: docker.io/lusig76/otel-shop-apache-web
+    newTag: 1.0.0
 
 patches:
   - path: patches/disable-local-otel-agent.yaml
