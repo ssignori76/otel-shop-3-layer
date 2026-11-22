@@ -48,7 +48,7 @@ Spring Cloud Gateway (api-gateway, WebFlux + JwtAuthenticationWebFilter, :8080)
 | **Edge** (`commerce-edge`) | `apache-web` | Apache `httpd:2.4.62-alpine` (`UID 82`) | Public entry point, **v2.0 Frontend SPA** (`/`), `/healthz`, reverse proxy `/api/*` |
 | **Edge** (`commerce-edge`) | `api-gateway` | Java 21, Spring Cloud Gateway | `POST /api/journeys` orchestration, static routes, **JWT validation** (`JwtAuthenticationWebFilter`), header propagation |
 | **Edge** (`commerce-edge`) | `journey-generator` | Java 21, Spring Boot | Continuous traffic simulator (10s, `max_in_flight=1`) with JWT auth/login checks + trigger API |
-| **Core** (`commerce-core`) | `auth-service` | Java 21, Spring MVC + JDBC + Flyway + BCrypt/JWT | User registration, **JWT HS256** login, `/me` profile, seeded demo user (`demo@otelshop.local`) on `auth_db` |
+| **Core** (`commerce-core`) | `auth-service` | Java 21, Spring MVC + JDBC + Flyway + BCrypt/JWT | User registration, **JWT HS256** login, password reset (`/api/auth/reset-password`), `/me` profile, seeded demo user (`demo@otelshop.local`) on `auth_db` |
 | **Core** (`commerce-core`) | `cart-service` | Java 21, Spring MVC + JDBC + Flyway | **3 demo products** catalog (`/api/products`), cart and line-item management on `cart_db` |
 | **Core** (`commerce-core`) | `checkout-service` | Java 21, Spring MVC + JDBC + AMQP | Checkout orchestration, user order history (`/api/orders`) on `checkout_db`, confirmed RabbitMQ publish |
 | **Core** (`commerce-core`) | `merchant-service` | Java 21, Spring MVC | Payment authorization simulation |

@@ -81,6 +81,20 @@ public class UserRepository {
         }
     }
 
+    @Transactional
+    public boolean updatePasswordByEmail(String email, String newPasswordHash) {
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+        int updated = jdbcTemplate.update(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE email = ?",
+                newPasswordHash,
+                Timestamp.from(Instant.now()),
+                normalizeEmail(email)
+        );
+        return updated > 0;
+    }
+
     public static String normalizeEmail(String email) {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
     }

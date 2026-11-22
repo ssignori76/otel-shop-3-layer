@@ -4,6 +4,7 @@ import com.commerce.synthetic.api.AuthResponse;
 import com.commerce.synthetic.api.JwtTokenProvider;
 import com.commerce.synthetic.api.LoginRequest;
 import com.commerce.synthetic.api.RegisterRequest;
+import com.commerce.synthetic.api.ResetPasswordRequest;
 import com.commerce.synthetic.api.UserProfileResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -70,5 +71,30 @@ class AuthControllerTest {
                 null, null, null, null
         );
         assertThat(badLogin.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        // Reset password and verify new password works while old password fails
+        ResponseEntity<?> resetResp = authController.resetPassword(
+                new ResetPasswordRequest("alice@example.com", "NewStrongPass456!"),
+                null, null, null, null
+        );
+        assertThat(resetResp.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<?> oldPassLogin = authController.login(
+                new LoginRequest("alice@example.com", "StrongPass123!"),
+                null, null, null, null
+        );
+        assertThat(oldPassLogin.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        ResponseEntity<?> newPassLogin = authController.login(
+                new LoginRequest("alice@example.com", "NewStrongPass456!"),
+                null, null, null, null
+        );
+        assertThat(newPassLogin.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<?> unknownReset = authController.resetPassword(
+                new ResetPasswordRequest("nobody@example.com", "NewStrongPass456!"),
+                null, null, null, null
+        );
+        assertThat(unknownReset.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 }

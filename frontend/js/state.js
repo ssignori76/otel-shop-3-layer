@@ -30,6 +30,8 @@ export const store = {
     cart: null,
     lastCheckout: null,
     pendingSku: null,
+    sessionExpired: false,
+    prefillEmail: "",
 
     newJourneyId() {
         return generateUuid();

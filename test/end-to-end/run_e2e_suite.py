@@ -630,7 +630,43 @@ def verify_v2_spa_and_auth():
     if not fulfilled:
         return False, f"Order {order_id} did not reach FULFILLED via GET /api/fulfillments/{order_id}"
 
-    return True, f"SPA + JWT auth + 3 products + 2-item cart + checkout ({order_id}) + FULFILLED loop verified"
+    # 7. Verify expired/invalid JWT rejection (401 INVALID_TOKEN) and Reset Password flow
+    st_bad_tok, body_bad_tok = http_json(
+        f"{APACHE_URL}/api/orders",
+        headers={"Authorization": "Bearer invalid.expired.token"},
+        timeout=10,
+    )
+    if st_bad_tok != 401 or body_bad_tok.get("error_code") != "INVALID_TOKEN":
+        return False, f"Expected 401 INVALID_TOKEN for bad JWT, got status={st_bad_tok} body={body_bad_tok}"
+
+    st_reset, body_reset = http_json(
+        f"{APACHE_URL}/api/auth/reset-password",
+        method="POST",
+        payload={"email": e2e_email, "new_password": "NewE2ePassword999!"},
+        timeout=10,
+    )
+    if st_reset != 200 or body_reset.get("status") != "PASSWORD_UPDATED":
+        return False, f"POST /api/auth/reset-password failed: status={st_reset} body={body_reset}"
+
+    st_old_login, _ = http_json(
+        f"{APACHE_URL}/api/auth/login",
+        method="POST",
+        payload={"email": e2e_email, "password": "E2ePassword123!"},
+        timeout=10,
+    )
+    if st_old_login != 401:
+        return False, f"Old password unexpectedly succeeded after reset: status={st_old_login}"
+
+    st_new_login, body_new_login = http_json(
+        f"{APACHE_URL}/api/auth/login",
+        method="POST",
+        payload={"email": e2e_email, "password": "NewE2ePassword999!"},
+        timeout=10,
+    )
+    if st_new_login != 200 or not body_new_login.get("access_token"):
+        return False, f"Login with new password failed after reset: status={st_new_login}"
+
+    return True, f"SPA + JWT auth + reset-password + 3 products + 2-item cart + checkout ({order_id}) + FULFILLED loop verified"
 
 
 def main():

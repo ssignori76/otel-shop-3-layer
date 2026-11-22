@@ -34,7 +34,12 @@ async function apiFetch(path, options = {}) {
 
     if (!response.ok) {
         if (response.status === 401 && !options.skipAuth) {
+            const wasAuthenticated = store.isAuthenticated();
             store.clearAuth();
+            if (wasAuthenticated) {
+                store.sessionExpired = true;
+                window.dispatchEvent(new CustomEvent("auth:expired"));
+            }
         }
         const err = new Error(data?.message || `HTTP ${response.status}`);
         err.status = response.status;
@@ -64,6 +69,14 @@ export const api = {
             method: "POST",
             skipAuth: true,
             body: { email, password }
+        });
+    },
+
+    resetPassword(email, newPassword) {
+        return apiFetch("/api/auth/reset-password", {
+            method: "POST",
+            skipAuth: true,
+            body: { email, new_password: newPassword }
         });
     },
 

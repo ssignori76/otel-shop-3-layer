@@ -178,15 +178,23 @@ async function renderHome() {
 }
 
 function renderLogin() {
+    const expiredBanner = store.sessionExpired
+        ? `<div class="alert alert-error">Your session has expired. Please sign in again to continue.</div>`
+        : "";
+    const prefillEmail = escapeHtml(store.prefillEmail || "");
+    store.sessionExpired = false;
+    store.prefillEmail = "";
+
     appEl.innerHTML = `
         <section class="card auth-card">
             <h1>Sign in to your account</h1>
             <p class="muted">Sign in to manage your shopping cart and confirm orders.</p>
+            ${expiredBanner}
             <div id="auth-error"></div>
             <form id="login-form">
                 <div class="form-group">
                     <label for="login-email">Email</label>
-                    <input id="login-email" type="email" required autocomplete="email" placeholder="name@example.com">
+                    <input id="login-email" type="email" required autocomplete="email" value="${prefillEmail}" placeholder="name@example.com">
                 </div>
                 <div class="form-group">
                     <label for="login-password">Password</label>
@@ -204,6 +212,8 @@ function renderLogin() {
             </div>
 
             <p class="muted" style="text-align: center;">
+                <a href="/reset-password" data-link>Forgot password?</a>
+                &middot;
                 Don't have an account? <a href="/register" data-link>Create one now</a>
             </p>
         </section>
@@ -485,6 +495,61 @@ async function renderOrders(pollAttempt = 0) {
     }
 }
 
+function renderResetPassword() {
+    appEl.innerHTML = `
+        <section class="card auth-card">
+            <h1>Reset your password</h1>
+            <p class="muted">Enter your account email and choose a new password (minimum 8 characters).</p>
+            <div id="reset-error"></div>
+            <form id="reset-form">
+                <div class="form-group">
+                    <label for="reset-email">Email</label>
+                    <input id="reset-email" type="email" required autocomplete="email" placeholder="name@example.com">
+                </div>
+                <div class="form-group">
+                    <label for="reset-password">New Password (minimum 8 characters)</label>
+                    <input id="reset-password" type="password" required minlength="8" autocomplete="new-password" placeholder="••••••••">
+                </div>
+                <div class="form-group">
+                    <label for="reset-password-confirm">Confirm New Password</label>
+                    <input id="reset-password-confirm" type="password" required minlength="8" autocomplete="new-password" placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;" id="btn-reset-submit">Update password</button>
+            </form>
+            <p class="muted" style="text-align: center;">
+                Remembered your password? <a href="/login" data-link>Back to Sign in</a>
+            </p>
+        </section>
+    `;
+
+    document.getElementById("reset-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("reset-email").value.trim();
+        const newPassword = document.getElementById("reset-password").value;
+        const confirmPassword = document.getElementById("reset-password-confirm").value;
+        const submitBtn = document.getElementById("btn-reset-submit");
+        const errBox = document.getElementById("reset-error");
+        errBox.innerHTML = "";
+
+        if (newPassword !== confirmPassword) {
+            errBox.innerHTML = `<div class="alert alert-error">Passwords do not match.</div>`;
+            return;
+        }
+
+        submitBtn.disabled = true;
+        try {
+            await api.resetPassword(email, newPassword);
+            store.prefillEmail = email;
+            showToast("Password updated! Please sign in with your new password.", "success");
+            navigate("/login");
+        } catch (err) {
+            errBox.innerHTML = `<div class="alert alert-error">${escapeHtml(err.message)}</div>`;
+        } finally {
+            submitBtn.disabled = false;
+        }
+    });
+}
+
 async function renderRoute() {
     renderNavbar();
     const path = window.location.pathname;
@@ -492,6 +557,8 @@ async function renderRoute() {
         renderLogin();
     } else if (path === "/register") {
         renderRegister();
+    } else if (path === "/reset-password") {
+        renderResetPassword();
     } else if (path === "/cart") {
         await renderCart();
     } else if (path === "/orders") {
@@ -500,6 +567,12 @@ async function renderRoute() {
         await renderHome();
     }
 }
+
+// Redirect to login with explicit notice whenever a JWT expires (HTTP 401)
+window.addEventListener("auth:expired", () => {
+    showToast("Your session has expired. Please sign in again.", "error");
+    navigate("/login");
+});
 
 // Intercept SPA links
 document.addEventListener("click", (e) => {

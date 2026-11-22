@@ -5,6 +5,7 @@ import com.commerce.synthetic.api.AuthResponse;
 import com.commerce.synthetic.api.JwtTokenProvider;
 import com.commerce.synthetic.api.LoginRequest;
 import com.commerce.synthetic.api.RegisterRequest;
+import com.commerce.synthetic.api.ResetPasswordRequest;
 import com.commerce.synthetic.api.UserProfileResponse;
 import com.commerce.synthetic.scenario.CorrelationHeaders;
 import com.commerce.synthetic.scenario.JourneyState;
@@ -216,6 +217,55 @@ public class AuthController {
             }
             UserProfileResponse profile = found.get().toProfile();
             return ResponseEntity.ok(profile);
+        } finally {
+            TelemetryHelper.clearMdc();
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request,
+            @RequestHeader(value = CorrelationHeaders.RUN_ID, required = false) String headerRunId,
+            @RequestHeader(value = CorrelationHeaders.JOURNEY_ID, required = false) String headerJourneyId,
+            @RequestHeader(value = CorrelationHeaders.SIMULATION_SCENARIO, required = false) String headerScenario,
+            @RequestHeader(value = CorrelationHeaders.SIMULATION_ENABLED, required = false) String headerEnabled
+    ) {
+        ScenarioContext ctx = resolveContext(headerRunId, headerJourneyId, headerScenario, headerEnabled);
+        try {
+            TelemetryHelper.bindContext(ctx, JourneyState.STARTED);
+            String normalizedEmail = UserRepository.normalizeEmail(request.email());
+            String newHash = passwordEncoder.encode(request.newPassword());
+            boolean updated = userRepository.updatePasswordByEmail(normalizedEmail, newHash);
+            if (!updated) {
+                TelemetryHelper.incrementCounter(
+                        "commerce.auth.password_resets",
+                        "{reset}",
+                        "Total password reset attempts in auth-service",
+                        Map.of("auth.outcome", "not_found")
+                );
+                log.warn("Password reset rejected: account not found");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                        ApiErrorResponse.of(
+                                HttpStatus.NOT_FOUND.value(),
+                                "USER_NOT_FOUND",
+                                "No account found with this email address",
+                                ctx.runId(),
+                                ctx.journeyId(),
+                                TelemetryHelper.currentTraceId()
+                        )
+                );
+            }
+            TelemetryHelper.incrementCounter(
+                    "commerce.auth.password_resets",
+                    "{reset}",
+                    "Total password reset attempts in auth-service",
+                    Map.of("auth.outcome", "success")
+            );
+            log.info("User password reset completed successfully");
+            return ResponseEntity.ok(Map.of(
+                    "status", "PASSWORD_UPDATED",
+                    "email", normalizedEmail
+            ));
         } finally {
             TelemetryHelper.clearMdc();
         }
