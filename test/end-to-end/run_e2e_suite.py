@@ -415,7 +415,8 @@ def verify_otel_logs_via_victorialogs(known_journey_ids, known_trace_ids):
     missing_svcs = expected_services - observed_services
     if missing_svcs:
         return False, f"Missing services in VictoriaLogs: {sorted(missing_svcs)} (observed: {sorted(observed_services)})"
-    if not fluentbit_namespaces:
+    require_fluentbit = os.environ.get("REQUIRE_FLUENTBIT_LOGS", "true").lower() == "true"
+    if require_fluentbit and not fluentbit_namespaces:
         return False, "No Fluent Bit Kubernetes container logs found in VictoriaLogs"
     if correlated_log_count == 0 or not matched_traces or not matched_journeys:
         return False, (

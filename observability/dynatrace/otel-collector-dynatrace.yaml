@@ -1,3 +1,16 @@
+# Official Dynatrace OpenTelemetry Collector Configuration (v0.60.0)
+# Distribution: ghcr.io/dynatrace/dynatrace-otel-collector/dynatrace-otel-collector:0.60.0
+# Reference: https://docs.dynatrace.com/docs/ingest-from/opentelemetry/collector
+#
+# Required environment variables (supplied via .env on Docker Compose or Secret on Kubernetes):
+#   DT_OTLP_ENDPOINT  Example: https://<env-id>.live.dynatrace.com/api/v2/otlp
+#   DT_AUTH_SCHEME    Authentication scheme:
+#                       - "Api-Token" (default) for Classic Dynatrace API Tokens
+#                         Required scopes: openTelemetryTrace.ingest, metrics.ingest, logs.ingest
+#                       - "Bearer" for Dynatrace Platform Tokens (Grail / OpenPipeline)
+#                         Required scopes: openpipeline:traces:ingest, openpipeline:metrics:ingest, openpipeline:logs:ingest
+#   DT_API_TOKEN      Your Dynatrace API Token or Platform Token (never commit to Git)
+
 receivers:
   otlp:
     protocols:
@@ -7,16 +20,29 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+
+  # Mandatory for Dynatrace Grail:
+  # Grail expects delta temporality for counter and histogram metrics.
+  # cumulative_to_delta converts incoming cumulative monotonic sums and histograms
+  # into delta temporality on the fly. max_staleness prevents memory growth from stale series.
+  cumulative_to_delta:
+    max_staleness: 25h
+
   batch:
     send_batch_size: 512
     timeout: 2s
-  cumulativetodelta: {}
 
 exporters:
-  otlphttp/dynatrace:
-    endpoint: ${env:DT_OTLP_ENDPOINT}
+  otlp_http/dynatrace:
+    endpoint: "${env:DT_OTLP_ENDPOINT}"
     headers:
-      Authorization: "Api-Token ${env:DT_API_TOKEN}"
+      # Supports BOTH Classic API Tokens (DT_AUTH_SCHEME=Api-Token)
+      # and Platform Tokens (DT_AUTH_SCHEME=Bearer).
+      Authorization: "${env:DT_AUTH_SCHEME} ${env:DT_API_TOKEN}"
 
 extensions:
   health_check:
@@ -27,13 +53,15 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [otlphttp/dynatrace]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/dynatrace]
+
     metrics:
       receivers: [otlp]
-      processors: [cumulativetodelta, batch]
-      exporters: [otlphttp/dynatrace]
+      processors: [memory_limiter, cumulative_to_delta, batch]
+      exporters: [otlp_http/dynatrace]
+
     logs:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [otlphttp/dynatrace]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/dynatrace]

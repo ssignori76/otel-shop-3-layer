@@ -7,7 +7,7 @@ export PATH="${HOME}/.local/bin:${PATH}"
 CLUSTER_NAME="${KIND_CLUSTER_NAME:-commerce-synthetic}"
 APP_VERSION="${APP_VERSION:-2.0.0}"
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-commerce}"
-K8S_OVERLAY="${1:-${K8S_OVERLAY:-local-observability}}"
+K8S_OVERLAY="${1:-${K8S_OVERLAY:-dev}}"
 
 if ! kind get clusters | grep -qx "${CLUSTER_NAME}"; then
   echo "[k8s-up] Creating kind cluster '${CLUSTER_NAME}'..."
@@ -31,15 +31,17 @@ IMAGES=(
   "test-runner"
 )
 
-echo "[k8s-up] Loading local application images into kind cluster '${CLUSTER_NAME}'..."
-for img in "${IMAGES[@]}"; do
-  full_img="${IMAGE_REGISTRY}/${img}:${APP_VERSION}"
-  if ! docker image inspect "${full_img}" >/dev/null 2>&1; then
-    echo "[ERROR] Missing local image ${full_img}. Run 'make build' first." >&2
-    exit 1
-  fi
-  kind load docker-image "${full_img}" --name "${CLUSTER_NAME}"
-done
+if [ "${K8S_OVERLAY}" = "dev" ]; then
+  echo "[k8s-up] Loading local application images into kind cluster '${CLUSTER_NAME}'..."
+  for img in "${IMAGES[@]}"; do
+    full_img="${IMAGE_REGISTRY}/${img}:${APP_VERSION}"
+    if ! docker image inspect "${full_img}" >/dev/null 2>&1; then
+      echo "[ERROR] Missing local image ${full_img}. Run 'make build' first." >&2
+      exit 1
+    fi
+    kind load docker-image "${full_img}" --name "${CLUSTER_NAME}"
+  done
+fi
 
 echo "[k8s-up] Applying Kustomize overlay: k8s/overlays/${K8S_OVERLAY}"
 kubectl apply -k "k8s/overlays/${K8S_OVERLAY}"
@@ -48,13 +50,16 @@ echo "[k8s-up] Waiting for commerce-data StatefulSets (mysql, rabbitmq)..."
 kubectl -n commerce-data rollout status statefulset/mysql --timeout=180s
 kubectl -n commerce-data rollout status statefulset/rabbitmq --timeout=180s
 
-if [ "${K8S_OVERLAY}" = "local-observability" ]; then
+if [ "${K8S_OVERLAY}" = "dev" ]; then
   echo "[k8s-up] Waiting for commerce-observability components..."
   kubectl -n commerce-observability rollout status deployment/jaeger --timeout=120s
   kubectl -n commerce-observability rollout status deployment/victoria-metrics --timeout=120s
   kubectl -n commerce-observability rollout status deployment/victoria-logs --timeout=120s
   kubectl -n commerce-observability rollout status deployment/otel-collector --timeout=120s
   kubectl -n commerce-observability rollout status daemonset/fluent-bit --timeout=120s
+elif [ "${K8S_OVERLAY}" = "prod-otel" ]; then
+  echo "[k8s-up] Waiting for official Dynatrace OTel Collector..."
+  kubectl -n commerce-core rollout status deployment/dynatrace-otel-collector --timeout=120s
 fi
 
 echo "[k8s-up] Waiting for commerce-core Deployments..."

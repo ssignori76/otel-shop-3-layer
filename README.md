@@ -127,36 +127,39 @@ For the full metrics, attributes, and log format catalog see [`docs/metrics-and-
 
 ---
 
-## 5. How to Use
+## 5. How to Use (3 Unified Cloud-Native Modes)
 
-The project supports **two cleanly separated operating modes**: **Development** (self-contained local environment with an open-source observability stack) and **Production** (clean deployment for clusters/hosts monitored by **Dynatrace**, without local observability tools).
+Both **Docker Compose** (configured via environment variables / `.env`) and **Kubernetes** (configured via `ConfigMap` & `Secret`) expose the exact same **3 operating modes**. Container **`stdout` JSON logging is always active** in all 3 modes.
 
 **Host prerequisites**: only **Docker Engine**, **Docker Compose**, and **Git** (no local JDK, Maven, Node, or Python required).
 
+| Mode | Docker Compose | Kubernetes (Kustomize) | OTel Agent & Exporters | Collector & Backend |
+|---|---|---|---|---|
+| **1. Development (`dev`)** | `compose.yaml` + `compose.dev.yaml` (`make up-dev`) | `k8s/overlays/dev` (`make k8s-up-dev`) | **ON** (`otlp` → `:4317`) | Local OTel Collector → **Jaeger** (`:16686`), **VictoriaMetrics** (`:18428`), **VictoriaLogs** (`:19428`) (+ Fluent Bit on K8s) |
+| **2. Production (`prod` — OneAgent)** | `compose.yaml` + `compose.prod.yaml` (`make up-prod`) | `k8s/overlays/prod` (`make k8s-up-prod`) | **OFF** (`JAVA_TOOL_OPTIONS=""`, `OTEL_*_EXPORTER=none`) | **None** (Dynatrace OneAgent + RUM; `stdout` JSON logs always ON) |
+| **3. Production + OTel (`prod-otel`)** | `compose.yaml` + `compose.prod-otel.yaml` (`make up-prod-otel`) | `k8s/overlays/prod-otel` (`make k8s-up-prod-otel`) | **ON** (`otlp` → `:4317`, `temporality=delta`) | Official **Dynatrace OTel Collector `0.60.0`** (`cumulative_to_delta` for Grail → `otlp_http/dynatrace`) |
+
 ---
 
-### Part A — Development Mode (with Local Observability Stack)
+### Mode 1 — Development (`dev`, with Local Observability Stack)
 
-Includes the local open-source observability stack to inspect and automatically verify **Spans (Jaeger)**, **Metrics (VictoriaMetrics / Prometheus)**, and **Logs (VictoriaLogs + Fluent Bit / OTLP)** with zero external dependencies.
+Includes Jaeger, VictoriaMetrics, and VictoriaLogs locally on both Docker Compose and Kubernetes (`kind`):
 
-#### 1. Run and Test on Docker Compose
 ```bash
-make test       # Runs unit tests, non-root image builds, and full E2E suite (Gates 1–13)
-make up         # Starts application stack + Jaeger + OTel Collector
+# Docker Compose
+make test       # Unit tests, non-root image builds, and full E2E suite (Gates 1–13)
+make up-dev     # Starts app stack + Jaeger + VictoriaMetrics + VictoriaLogs + OTel Collector
 make down       # Stops containers while preserving persistent MySQL/RabbitMQ volumes
 make clean      # Stops containers, removes volumes, and cleans test reports
-```
 
-#### 2. Run and Test on Local Kubernetes (`kind`)
-Automatically installs `kind` and `kubectl` into `~/.local/bin` (zero system pollution), creates the `commerce-synthetic` cluster with **4 namespaces** (`commerce-edge`, `commerce-core`, `commerce-data`, `commerce-observability`), loads local images, and runs all E2E tests in-cluster:
-```bash
-make build      # Builds all 10 local v2.0.0 images
-make k8s-up     # Starts kind with k8s/overlays/local-observability (4 namespaces + MySQL PVC)
-make k8s-test   # Validates dynatrace-ready overlay and runs the E2E Job on kind (Gates 1–13)
+# Kubernetes (kind)
+make build      # Builds all 10 local images
+make k8s-up-dev # Starts kind with k8s/overlays/dev (4 namespaces + MySQL 5Gi PVC)
+make k8s-test   # Validates prod & prod-otel overlays and runs E2E Job on kind (Gates 1–13)
 make k8s-down   # Deletes the kind cluster
 ```
 
-**Local Endpoints & UIs** (`kind` or Docker Compose):
+**Local Endpoints & UIs** (identical on Docker Compose `dev` and Kubernetes `dev`):
 - **Frontend E-Commerce SPA (v2.0)**: `http://localhost:18080/` *(pre-seeded demo account: `demo@otelshop.local` / `DemoPass123!`, or self-register at `/register`)*
 - **Apache Health Check**: `http://localhost:18080/healthz`
 - **Jaeger UI (Traces)**: `http://localhost:16686`
@@ -165,31 +168,41 @@ make k8s-down   # Deletes the kind cluster
 
 ---
 
-### Part B — Production Mode (Dynatrace-Ready, No Local Observability Stack)
+### Mode 2 — Production (`prod`, Dynatrace OneAgent + RUM, All Exporters OFF)
 
-Designed for deployment on a **Production Kubernetes cluster** (or Docker host) already monitored by **Dynatrace**, completely excluding Jaeger, VictoriaMetrics, VictoriaLogs, Fluent Bit, and the `commerce-observability` namespace.
-
-#### 1. Deploy to a Kubernetes Cluster with Dynatrace
-The [`k8s/overlays/dynatrace-ready`](k8s/overlays/dynatrace-ready/kustomization.yaml) overlay:
-- Deploys **only** the 3 application namespaces: `commerce-edge`, `commerce-core`, `commerce-data`.
-- Pulls published images directly from Docker Hub (`docker.io/lusig76/otel-shop-*:2.0.0`) with no local build or `kind load` required.
-- **Mode A (Default — Dynatrace OneAgent + RUM)**: disables the bundled OTel Java Agent (`JAVA_TOOL_OPTIONS=""`) to avoid dual-agent conflicts on the JVM while Dynatrace Operator / OneAgent instruments the services and auto-injects RUM into `apache-web`.
-- **Mode B (Alternative — Dynatrace OTLP Ingest)**: keeps the OTel Java Agent exporting Traces, Metrics, and Logs directly to the Dynatrace OTLP endpoint (see [`docs/kubernetes-deployment.md`](docs/kubernetes-deployment.md)).
+Zero local observability components, `JAVA_TOOL_OPTIONS=""` and `OTEL_*_EXPORTER=none` on all 7 Java services (no dual-agent conflict with OneAgent), while **structured JSON logs continue to write to container `stdout`**.
 
 ```bash
-# Preview generated manifests (verify zero local observability resources)
-make k8s-render-dynatrace
+# Docker Compose
+make up-prod
 
-# Apply to target Kubernetes cluster
-kubectl apply -k k8s/overlays/dynatrace-ready
+# Kubernetes (preview & apply — pulls docker.io/lusig76/otel-shop-*:2.0.0)
+make k8s-render-prod
+kubectl apply -k k8s/overlays/prod
 ```
 
-#### 2. Deploy on Docker Compose with Dynatrace OTLP
-Uses [`compose.dynatrace.yaml`](compose.dynatrace.yaml) and [`observability/dynatrace/otel-collector-dynatrace.yaml`](observability/dynatrace/otel-collector-dynatrace.yaml) (with `cumulativetodelta` processor for metrics):
+---
+
+### Mode 3 — Production with Official Dynatrace OTel Collector (`prod-otel`)
+
+Uses the official pinned **Dynatrace OpenTelemetry Collector** (`ghcr.io/dynatrace/dynatrace-otel-collector/dynatrace-otel-collector:0.60.0`) with the **`cumulative_to_delta`** processor (`max_staleness: 25h`) required by **Dynatrace Grail** for counter/histogram metrics, plus `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` on all 7 Java services. Supports both Classic API Tokens (`DT_AUTH_SCHEME=Api-Token`) and Platform Tokens (`DT_AUTH_SCHEME=Bearer`).
+
 ```bash
+# Docker Compose
 export DT_OTLP_ENDPOINT="https://<environment-id>.live.dynatrace.com/api/v2/otlp"
-export DT_API_TOKEN="<dynatrace-ingest-token>"
-./scripts/compose-up.sh dynatrace
+export DT_AUTH_SCHEME="Api-Token"   # or "Bearer" for Platform Tokens
+export DT_API_TOKEN="<your-dynatrace-token>"
+make up-prod-otel
+
+# Kubernetes (preview, apply, and set real Dynatrace Secret)
+make k8s-render-prod-otel
+kubectl apply -k k8s/overlays/prod-otel
+kubectl -n commerce-core create secret generic dynatrace-otlp-credentials \
+  --from-literal=DT_OTLP_ENDPOINT="https://<environment-id>.live.dynatrace.com/api/v2/otlp" \
+  --from-literal=DT_AUTH_SCHEME="Api-Token" \
+  --from-literal=DT_API_TOKEN="<your-dynatrace-token>" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n commerce-core rollout restart deployment/dynatrace-otel-collector
 ```
 
 #### Published Docker Hub Images (`lusig76`)
@@ -214,8 +227,9 @@ This `README.md` is the master index of the repository. Consult the specialized 
 |---|---|---|
 | [`docs/definitive-specification.md`](docs/definitive-specification.md) | Baseline normative specification: architecture, HTTP/AMQP/DB contracts, state machine, fault scenarios, and Gates 1–10. *(Canonical copy of the root specification)* | Before modifying REST/AMQP contracts, DB schemas, or fault scenario semantics. |
 | [`docs/metrics-and-logs-specification.md`](docs/metrics-and-logs-specification.md) | Normative extension for OpenTelemetry Metrics (24+ families) and Logs (stdout JSON + OTLP + MDC) and Gates 11–12. | Before adding/modifying custom metrics, MDC fields, or Collector pipelines. |
-| [`docs/kubernetes-deployment.md`](docs/kubernetes-deployment.md) | 4-namespace K8s architecture, manifest best practices, MySQL PVC persistence, `kind`, and `local-observability` vs `dynatrace-ready` overlays (Modes A/B). | When deploying on `kind` or a remote Kubernetes cluster monitored by Dynatrace. |
+| [`docs/kubernetes-deployment.md`](docs/kubernetes-deployment.md) | 4-namespace K8s architecture, manifest best practices, MySQL PVC persistence, `kind`, and the 3 unified overlays (`dev`, `prod`, `prod-otel`). | When deploying on `kind` or a remote Kubernetes cluster monitored by Dynatrace. |
 | [`docs/quality-and-testing.md`](docs/quality-and-testing.md) | Containerized test pyramid, complete definition of all **13 Quality Gates**, unit/integration/E2E execution, and report inspection. | When running quality checks, diagnosing failures, or extending the test suite. |
 | [`docs/development-and-maintenance.md`](docs/development-and-maintenance.md) | How to evolve and maintain the monorepo (new scenarios, metrics, Flyway migrations, Docker Hub image releases) and invariant rules for coding agents. | Before making code changes or releasing a new version. |
 | [`docs/operations-runbook.md`](docs/operations-runbook.md) | Day-2 operational commands: checking containers/pods (Docker Compose & Kubernetes, Dev & Production), streaming logs, MySQL login + SQL queries, and RabbitMQ checks. | Whenever operating, debugging, or inspecting live containers, logs, MySQL tables, or RabbitMQ queues. |
-| [`docs/v2-implementation-journey.md`](docs/v2-implementation-journey.md) | Operational progress tracker for v2.0.0 (`feat/v2-spa-auth-ecommerce`): step-by-step status, unplanned/extra activities, and Architecture Decision Records (ADR). | To inspect the current v2.0.0 progress and architectural decisions at any time. |
+| [`docs/v2-implementation-journey.md`](docs/v2-implementation-journey.md) | Operational progress tracker for v2.0.0 (`feat/v2-spa-auth-ecommerce`): step-by-step status, unplanned/extra activities, and Architecture Decision Records (ADR). | To inspect the v2.0.0 implementation history and architectural decisions. |
+| [`docs/v2.1-observability-modes-journey.md`](docs/v2.1-observability-modes-journey.md) | Operational progress tracker for v2.1.0 (`feat/v2.1-unified-3-modes`): unifying Docker Compose and Kubernetes into 3 cloud-native modes (`dev`, `prod`, `prod-otel`) with official Dynatrace OTel Collector. | To inspect the current v2.1.0 progress, extra activities, and ADRs. |

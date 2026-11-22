@@ -13,8 +13,8 @@ No host Java, Maven, Node, or Python tooling is required: all tests execute insi
 | **Unit Tests & JaCoCo** | `make unit-test` | Compiles all 11 Maven modules (including `auth-service`), runs JUnit 5 tests covering contracts, JWT signing/verification, Gateway JWT filter, state machine, REST controllers, AMQP listener, idempotency, poison messages, and JaCoCo coverage (stage `unit-test` in [`docker/java-service/Dockerfile`](../docker/java-service/Dockerfile)). |
 | **Image Build & Non-Root Gate** | `make build` | Multi-stage builds of all 10 `2.0.0` images (including SPA in `apache-web` and `auth-service`), CycloneDX SBOM generation (`/app/sbom.cdx.json`), and automated verification that no application container runs as `UID 0`. |
 | **Integration Checks** | `make integration-test` | Starts stack, verifies real `SELECT 1` on MySQL 8.4 with non-root user `cart_app`, and runs RabbitMQ AMQP port diagnostics. |
-| **E2E Suite (Docker Compose)** | `make e2e-test` or `make test` | Runs [`test/end-to-end/run_e2e_suite.py`](../test/end-to-end/run_e2e_suite.py) against the Compose stack (`compose.yaml` + `compose.test.yaml`), verifying Gates 3–13 and writing reports to `test/reports/`. |
-| **E2E Suite (Kubernetes `kind`)** | `make k8s-test` | Static Kustomize validation of `dynatrace-ready` (0 local observability resources) + in-cluster execution of Job `commerce-e2e-test-runner` on `kind` verifying Jaeger, **VictoriaMetrics** (PromQL), **VictoriaLogs** (OTLP + **Fluent Bit** LogsQL), and Gate 13 (SPA/JWT/Fulfillment). |
+| **E2E Suite (Docker Compose)** | `make e2e-test` or `make test` | Runs [`test/end-to-end/run_e2e_suite.py`](../test/end-to-end/run_e2e_suite.py) against the Compose `dev` stack (`compose.yaml` + `compose.dev.yaml`), verifying Gates 3–13 (Jaeger, VictoriaMetrics, VictoriaLogs) and writing reports to `test/reports/`. |
+| **E2E Suite (Kubernetes `kind`)** | `make k8s-test` | Static Kustomize validation of `prod` and `prod-otel` overlays (0 local observability resources) + in-cluster execution of Job `commerce-e2e-test-runner` on `kind` (`dev`) verifying Jaeger, **VictoriaMetrics** (PromQL), **VictoriaLogs** (OTLP + **Fluent Bit** LogsQL), and Gate 13 (SPA/JWT/Fulfillment). |
 
 ---
 
@@ -57,5 +57,5 @@ kubectl -n commerce-observability logs job/commerce-e2e-test-runner
 
 Before publishing a new version to Docker Hub (`DRY_RUN=false ./scripts/publish-images.sh`):
 1. Run `make test` (unit tests + build + Compose E2E) → confirm `Overall: PASS` in `test/reports/e2e-test-summary.txt`.
-2. Run `make k8s-test` (`dynatrace-ready` overlay validation + Kubernetes `kind` E2E) → confirm `Kubernetes E2E verification PASSED`.
+2. Run `make k8s-test` (`prod` & `prod-otel` overlay validation + Kubernetes `kind` `dev` E2E) → confirm `Kubernetes E2E verification PASSED`.
 3. Verify `git status` is clean and no `.env` files, backups, or secrets are tracked.

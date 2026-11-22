@@ -1,0 +1,59 @@
+# ==============================================================================
+# Mode 2: Production (prod) — Dynatrace OneAgent + RUM Integration
+# Usage: docker compose -f compose.yaml -f compose.prod.yaml up -d
+#        (or: make up-prod)
+#
+# - Disables bundled OpenTelemetry Java Agent (JAVA_TOOL_OPTIONS="") and sets
+#   all OTel exporters to "none" to avoid dual-agent conflicts with OneAgent.
+# - Deploys ZERO local observability containers.
+# - Structured JSON logs continue to be written unconditionally to container stdout.
+# ==============================================================================
+services:
+  auth-service:
+    environment:
+      JAVA_TOOL_OPTIONS: ""
+      OTEL_TRACES_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+  cart-service:
+    environment:
+      JAVA_TOOL_OPTIONS: ""
+      OTEL_TRACES_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+  merchant-service:
+    environment:
+      JAVA_TOOL_OPTIONS: ""
+      OTEL_TRACES_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+  checkout-service:
+    environment:
+      JAVA_TOOL_OPTIONS: ""
+      OTEL_TRACES_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+  fulfillment-service:
+    environment:
+      JAVA_TOOL_OPTIONS: ""
+      OTEL_TRACES_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+  api-gateway:
+    environment:
+      JAVA_TOOL_OPTIONS: ""
+      OTEL_TRACES_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+  journey-generator:
+    environment:
+      JAVA_TOOL_OPTIONS: ""
+      OTEL_TRACES_EXPORTER: none
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none

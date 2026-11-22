@@ -16,23 +16,23 @@ run_unit_tests() {
 
 run_integration_tests() {
   echo "[integration-test] Running containerized integration checks..."
-  ./scripts/compose-up.sh test
+  ./scripts/compose-up.sh dev
   ./scripts/wait-ready.sh
-  docker compose -f compose.yaml -f compose.test.yaml exec -T mysql \
+  docker compose -f compose.yaml -f compose.dev.yaml exec -T mysql \
     sh -c 'mysql -h 127.0.0.1 -ucart_app -pcart_local_dev_only -e "SELECT 1" cart_db'
-  docker compose -f compose.yaml -f compose.test.yaml exec -T rabbitmq \
+  docker compose -f compose.yaml -f compose.dev.yaml exec -T rabbitmq \
     rabbitmq-diagnostics -q check_port_connectivity
   echo "[integration-test] MySQL and RabbitMQ container contracts verified."
 }
 
 run_e2e_tests() {
-  echo "[e2e-test] Running full end-to-end test suite (Traces + Metrics + Logs)..."
+  echo "[e2e-test] Running full end-to-end test suite (dev mode: Jaeger + VictoriaMetrics + VictoriaLogs)..."
   mkdir -p test/reports
   chmod 777 test/reports
   REMOVE_VOLUMES=true ./scripts/compose-down.sh
-  ./scripts/compose-up.sh test
+  ./scripts/compose-up.sh dev
   ./scripts/wait-ready.sh
-  docker compose -f compose.yaml -f compose.test.yaml --profile e2e run --rm test-runner
+  docker compose -f compose.yaml -f compose.dev.yaml --profile e2e run --rm test-runner
   ./scripts/verify-jaeger.sh
 }
 

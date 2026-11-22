@@ -8,26 +8,24 @@ Practical day-2 command reference for inspecting containers/pods, streaming logs
 
 ### 1.1 Docker Compose
 
-#### Development / Test Mode (`compose.yaml` + `compose.test.yaml`)
+#### Mode 1 — Development (`compose.yaml` + `compose.dev.yaml`)
 ```bash
-# List all stack containers and their health status
-docker compose -f compose.yaml -f compose.test.yaml ps
-
-# Live CPU / memory usage
-docker stats --no-stream $(docker compose -f compose.yaml -f compose.test.yaml ps -q)
-
-# Verify Apache entry point & backend health
+docker compose -f compose.yaml -f compose.dev.yaml ps
+docker stats --no-stream $(docker compose -f compose.yaml -f compose.dev.yaml ps -q)
 curl -s http://localhost:18080/healthz
 curl -s http://localhost:18080/api/products
 ```
 
-#### Production / Dynatrace Mode (`compose.yaml` + `compose.dynatrace.yaml`)
+#### Mode 2 — Production OneAgent (`compose.yaml` + `compose.prod.yaml`)
 ```bash
-# List all containers in Dynatrace mode (no local Jaeger)
-docker compose -f compose.yaml -f compose.dynatrace.yaml ps
-
-# Inspect a specific container healthcheck output
+docker compose -f compose.yaml -f compose.prod.yaml ps
 docker inspect --format '{{json .State.Health}}' commerce-api-gateway
+```
+
+#### Mode 3 — Production with Dynatrace OTel Collector (`compose.yaml` + `compose.prod-otel.yaml`)
+```bash
+docker compose -f compose.yaml -f compose.prod-otel.yaml ps
+docker logs commerce-dynatrace-otel-collector --tail=50
 ```
 
 ---
@@ -36,7 +34,7 @@ docker inspect --format '{{json .State.Health}}' commerce-api-gateway
 
 > [!NOTE]
 > On local `kind`, ensure `~/.local/bin` is in your `PATH`: `export PATH="${HOME}/.local/bin:${PATH}"`.  
-> In **Production (`dynatrace-ready`)**, only the 3 application namespaces exist (`commerce-edge`, `commerce-core`, `commerce-data`). In **Local Dev (`local-observability`)**, the 4th namespace `commerce-observability` is also present.
+> In **Production (`prod` / `prod-otel`)**, only the 3 application namespaces exist (`commerce-edge`, `commerce-core`, `commerce-data`). In **Development (`dev`)**, the 4th namespace `commerce-observability` is also present.
 
 ```bash
 # Overview of all pods across all project namespaces
@@ -67,24 +65,23 @@ All Java services and Apache emit structured single-line JSON logs to `stdout` c
 ### 2.1 Docker Compose Logs
 
 ```bash
-# Tail logs from all services (Dev/Test)
-docker compose -f compose.yaml -f compose.test.yaml logs -f --tail=100
-
-# Tail logs from all services (Production / Dynatrace)
-docker compose -f compose.yaml -f compose.dynatrace.yaml logs -f --tail=100
+# Tail logs from all services (dev / prod / prod-otel)
+docker compose -f compose.yaml -f compose.dev.yaml logs -f --tail=100
+docker compose -f compose.yaml -f compose.prod.yaml logs -f --tail=100
+docker compose -f compose.yaml -f compose.prod-otel.yaml logs -f --tail=100
 
 # Tail a single service
-docker compose -f compose.yaml -f compose.test.yaml logs -f auth-service
-docker compose -f compose.yaml -f compose.test.yaml logs -f api-gateway
-docker compose -f compose.yaml -f compose.test.yaml logs -f apache-web
-docker compose -f compose.yaml -f compose.test.yaml logs -f cart-service
-docker compose -f compose.yaml -f compose.test.yaml logs -f checkout-service
-docker compose -f compose.yaml -f compose.test.yaml logs -f merchant-service
-docker compose -f compose.yaml -f compose.test.yaml logs -f fulfillment-service
-docker compose -f compose.yaml -f compose.test.yaml logs -f journey-generator
+docker compose -f compose.yaml -f compose.dev.yaml logs -f auth-service
+docker compose -f compose.yaml -f compose.dev.yaml logs -f api-gateway
+docker compose -f compose.yaml -f compose.dev.yaml logs -f apache-web
+docker compose -f compose.yaml -f compose.dev.yaml logs -f cart-service
+docker compose -f compose.yaml -f compose.dev.yaml logs -f checkout-service
+docker compose -f compose.yaml -f compose.dev.yaml logs -f merchant-service
+docker compose -f compose.yaml -f compose.dev.yaml logs -f fulfillment-service
+docker compose -f compose.yaml -f compose.dev.yaml logs -f journey-generator
 
 # Search logs for a specific trace_id or journey_id
-docker compose -f compose.yaml -f compose.test.yaml logs --tail=500 | grep "<trace_id_or_journey_id>"
+docker compose -f compose.yaml -f compose.dev.yaml logs --tail=500 | grep "<trace_id_or_journey_id>"
 ```
 
 ### 2.2 Kubernetes Logs
@@ -106,7 +103,7 @@ kubectl -n commerce-core logs -f deploy/fulfillment-service --tail=100
 kubectl -n commerce-data logs -f sts/mysql --tail=100
 kubectl -n commerce-data logs -f sts/rabbitmq --tail=100
 
-# Local observability layer (only in local-observability overlay)
+# Local observability layer (only in dev overlay)
 kubectl -n commerce-observability logs -f deploy/otel-collector --tail=100
 kubectl -n commerce-observability logs -f ds/fluent-bit --tail=100
 

@@ -1,0 +1,144 @@
+# ==============================================================================
+# Mode 3: Production with Official Dynatrace OpenTelemetry Collector (prod-otel)
+# Usage:
+#   export DT_OTLP_ENDPOINT="https://<env-id>.live.dynatrace.com/api/v2/otlp"
+#   export DT_AUTH_SCHEME="Api-Token"   # or "Bearer" for Platform Tokens
+#   export DT_API_TOKEN="<your-token>"
+#   docker compose -f compose.yaml -f compose.prod-otel.yaml up -d
+#   (or: make up-prod-otel)
+#
+# - Uses official Dynatrace OTel Collector distribution (pinned v0.60.0)
+#   with cumulative_to_delta processor for Grail counter compatibility.
+# - Structured JSON logs continue to be written unconditionally to container stdout.
+# ==============================================================================
+services:
+  dynatrace-otel-collector:
+    image: ghcr.io/dynatrace/dynatrace-otel-collector/dynatrace-otel-collector:0.60.0
+    container_name: commerce-dynatrace-otel-collector
+    command:
+      - --config=/etc/otelcol/config.yaml
+    environment:
+      DT_OTLP_ENDPOINT: ${DT_OTLP_ENDPOINT:?DT_OTLP_ENDPOINT must be set (e.g. https://<env-id>.live.dynatrace.com/api/v2/otlp)}
+      DT_AUTH_SCHEME: ${DT_AUTH_SCHEME:-Api-Token}
+      DT_API_TOKEN: ${DT_API_TOKEN:?DT_API_TOKEN must be set}
+    volumes:
+      - ./observability/dynatrace/otel-collector-dynatrace.yaml:/etc/otelcol/config.yaml:ro
+    networks:
+      - commerce-net
+
+  auth-service:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      dynatrace-otel-collector:
+        condition: service_started
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dynatrace-otel-collector:4317
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+
+  cart-service:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      dynatrace-otel-collector:
+        condition: service_started
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dynatrace-otel-collector:4317
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+
+  merchant-service:
+    depends_on:
+      dynatrace-otel-collector:
+        condition: service_started
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dynatrace-otel-collector:4317
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+
+  checkout-service:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      merchant-service:
+        condition: service_healthy
+      dynatrace-otel-collector:
+        condition: service_started
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dynatrace-otel-collector:4317
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+
+  fulfillment-service:
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      dynatrace-otel-collector:
+        condition: service_started
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dynatrace-otel-collector:4317
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+
+  api-gateway:
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      cart-service:
+        condition: service_healthy
+      checkout-service:
+        condition: service_healthy
+      fulfillment-service:
+        condition: service_healthy
+      dynatrace-otel-collector:
+        condition: service_started
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dynatrace-otel-collector:4317
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+
+  journey-generator:
+    depends_on:
+      apache-web:
+        condition: service_healthy
+      fulfillment-service:
+        condition: service_healthy
+      dynatrace-otel-collector:
+        condition: service_started
+    environment:
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=${DT_ENVIRONMENT:-production},service.version=${APP_VERSION:-2.0.0}
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dynatrace-otel-collector:4317
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta

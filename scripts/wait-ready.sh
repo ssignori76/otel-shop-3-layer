@@ -18,7 +18,7 @@ CONTAINERS=(
 )
 
 if docker ps --format '{{.Names}}' | grep -q '^commerce-jaeger$'; then
-  CONTAINERS+=("commerce-jaeger" "commerce-otel-collector")
+  CONTAINERS+=("commerce-jaeger" "commerce-victoria-metrics" "commerce-victoria-logs" "commerce-otel-collector")
 fi
 
 echo "[wait-ready] Waiting up to ${TIMEOUT_SECONDS}s for all containers to report healthy..."

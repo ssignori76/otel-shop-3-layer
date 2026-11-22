@@ -1,4 +1,5 @@
-.PHONY: build unit-test integration-test e2e-test test up down clean images publish k8s-up k8s-up-dynatrace k8s-test k8s-down k8s-render-dynatrace
+.PHONY: build unit-test integration-test e2e-test test up up-dev up-prod up-prod-otel down clean images publish \
+        k8s-up k8s-up-dev k8s-up-prod k8s-up-prod-otel k8s-test k8s-down k8s-render-prod k8s-render-prod-otel
 
 build:
 	./scripts/container-build.sh
@@ -18,8 +19,18 @@ e2e-test:
 test:
 	./scripts/container-test.sh all
 
-up:
-	./scripts/compose-up.sh test
+up: up-dev
+
+up-dev:
+	./scripts/compose-up.sh dev
+	./scripts/wait-ready.sh
+
+up-prod:
+	./scripts/compose-up.sh prod
+	./scripts/wait-ready.sh
+
+up-prod-otel:
+	./scripts/compose-up.sh prod-otel
 	./scripts/wait-ready.sh
 
 down:
@@ -32,11 +43,16 @@ clean:
 publish:
 	./scripts/publish-images.sh
 
-k8s-up:
-	./scripts/k8s-up.sh local-observability
+k8s-up: k8s-up-dev
 
-k8s-up-dynatrace:
-	./scripts/k8s-up.sh dynatrace-ready
+k8s-up-dev:
+	./scripts/k8s-up.sh dev
+
+k8s-up-prod:
+	./scripts/k8s-up.sh prod
+
+k8s-up-prod-otel:
+	./scripts/k8s-up.sh prod-otel
 
 k8s-test:
 	./scripts/k8s-test.sh
@@ -44,5 +60,8 @@ k8s-test:
 k8s-down:
 	./scripts/k8s-down.sh
 
-k8s-render-dynatrace:
-	kubectl kustomize k8s/overlays/dynatrace-ready
+k8s-render-prod:
+	kubectl kustomize k8s/overlays/prod
+
+k8s-render-prod-otel:
+	kubectl kustomize k8s/overlays/prod-otel
