@@ -1,4 +1,4 @@
-.PHONY: build unit-test integration-test e2e-test test up down clean images publish
+.PHONY: build unit-test integration-test e2e-test test up down clean images publish k8s-up k8s-up-dynatrace k8s-test k8s-down k8s-render-dynatrace
 
 build:
 	./scripts/container-build.sh
@@ -31,3 +31,18 @@ clean:
 
 publish:
 	./scripts/publish-images.sh
+
+k8s-up:
+	./scripts/k8s-up.sh local-observability
+
+k8s-up-dynatrace:
+	./scripts/k8s-up.sh dynatrace-ready
+
+k8s-test:
+	./scripts/k8s-test.sh
+
+k8s-down:
+	./scripts/k8s-down.sh
+
+k8s-render-dynatrace:
+	kubectl kustomize k8s/overlays/dynatrace-ready

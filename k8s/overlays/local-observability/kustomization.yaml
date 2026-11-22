@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - observability/namespace.yaml
+  - observability/jaeger.yaml
+  - observability/victoria-metrics.yaml
+  - observability/victoria-logs.yaml
+  - observability/otel-collector.yaml
+  - observability/fluent-bit.yaml
+
+patches:
+  - path: patches/enable-local-otel.yaml

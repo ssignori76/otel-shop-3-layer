@@ -1,0 +1,95 @@
+# Mode A (Default): Disables the bundled OpenTelemetry Java Agent (JAVA_TOOL_OPTIONS="")
+# so Dynatrace Operator / OneAgent can instrument the JVM and collect container logs
+# without double-agent conflicts.
+#
+# Mode B (Alternative — Dynatrace OTLP Ingest):
+# Remove the JAVA_TOOL_OPTIONS overrides below and set in ConfigMaps:
+#   OTEL_TRACES_EXPORTER: otlp
+#   OTEL_METRICS_EXPORTER: otlp
+#   OTEL_LOGS_EXPORTER: otlp
+#   OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+#   OTEL_EXPORTER_OTLP_ENDPOINT: https://<env-id>.live.dynatrace.com/api/v2/otlp
+#   OTEL_EXPORTER_OTLP_HEADERS: "Authorization=Api-Token <token-from-secret>"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: commerce-edge
+spec:
+  template:
+    spec:
+      containers:
+        - name: api-gateway
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: journey-generator
+  namespace: commerce-edge
+spec:
+  template:
+    spec:
+      containers:
+        - name: journey-generator
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-service
+  namespace: commerce-core
+spec:
+  template:
+    spec:
+      containers:
+        - name: cart-service
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: merchant-service
+  namespace: commerce-core
+spec:
+  template:
+    spec:
+      containers:
+        - name: merchant-service
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-service
+  namespace: commerce-core
+spec:
+  template:
+    spec:
+      containers:
+        - name: checkout-service
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fulfillment-service
+  namespace: commerce-core
+spec:
+  template:
+    spec:
+      containers:
+        - name: fulfillment-service
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: ""

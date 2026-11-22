@@ -1,0 +1,23 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: commerce-synthetic
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.31.2
+    extraPortMappings:
+      # Apache Web Entry Point (commerce-edge)
+      - containerPort: 30080
+        hostPort: 18080
+        protocol: TCP
+      # Jaeger UI & Query API (commerce-observability)
+      - containerPort: 30686
+        hostPort: 16686
+        protocol: TCP
+      # VictoriaMetrics UI & PromQL API (commerce-observability)
+      - containerPort: 30428
+        hostPort: 18428
+        protocol: TCP
+      # VictoriaLogs UI & LogsQL API (commerce-observability)
+      - containerPort: 30928
+        hostPort: 19428
+        protocol: TCP

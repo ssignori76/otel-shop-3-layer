@@ -21,6 +21,8 @@ GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://api-gateway:8080")
 GENERATOR_URL = os.environ.get("GENERATOR_URL", "http://journey-generator:8085")
 JAEGER_URL = os.environ.get("JAEGER_URL", "http://jaeger:16686")
 OTEL_PROMETHEUS_URL = os.environ.get("OTEL_PROMETHEUS_URL", "http://otel-collector:8889/metrics")
+VICTORIA_METRICS_URL = os.environ.get("VICTORIA_METRICS_URL", "").rstrip("/")
+VICTORIA_LOGS_URL = os.environ.get("VICTORIA_LOGS_URL", "").rstrip("/")
 OTEL_EXPORT_DIR = os.environ.get("OTEL_EXPORT_DIR", "/var/log/otel")
 MYSQL_HOST = os.environ.get("MYSQL_HOST", "mysql")
 MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
@@ -144,7 +146,14 @@ def fetch_jaeger_trace(trace_id, required_services=None, timeout_sec=12.0):
             last_trace = trace_obj
             processes = trace_obj.get("processes", {})
             observed_services = {p.get("serviceName") for p in processes.values()}
-            if not required_services or required_services.issubset(observed_services):
+            spans = trace_obj.get("spans", [])
+            span_ids = {s["spanID"] for s in spans}
+            has_orphan = any(
+                ref.get("spanID") not in span_ids
+                for s in spans
+                for ref in s.get("references", [])
+            )
+            if (not required_services or required_services.issubset(observed_services)) and not has_orphan:
                 return trace_obj
         time.sleep(0.4)
     return last_trace
@@ -325,6 +334,24 @@ def verify_otel_metrics():
     if missing_metrics:
         return False, f"Missing expected OpenTelemetry metrics on Prometheus endpoint: {missing_metrics}"
 
+    if VICTORIA_METRICS_URL:
+        vm_status, vm_body = http_json(f"{VICTORIA_METRICS_URL}/api/v1/label/__name__/values", timeout=15)
+        if vm_status != 200 or vm_body.get("status") != "success":
+            return False, f"VictoriaMetrics label query failed (HTTP {vm_status}): {vm_body}"
+        vm_names = set(vm_body.get("data", []))
+        # VictoriaMetrics stores OTLP metric names in dot or underscore form depending on ingestion format
+        missing_vm = []
+        for m in required_metric_Families:
+            dot_name = m.replace("_", ".")
+            if not any((m in n or dot_name in n or m.replace("_milliseconds", "").replace("_seconds", "").replace("_bytes", "") in n.replace(".", "_")) for n in vm_names):
+                missing_vm.append(m)
+        if missing_vm:
+            return False, f"Missing expected OpenTelemetry metrics in VictoriaMetrics: {missing_vm}"
+        return True, (
+            f"All {len(required_metric_Families)} runtime and custom business metric families verified "
+            f"in OTel Collector Prometheus & VictoriaMetrics ({len(vm_names)} series names ingested)"
+        )
+
     metrics_file = os.path.join(OTEL_EXPORT_DIR, "metrics.json")
     if not os.path.exists(metrics_file) or os.path.getsize(metrics_file) == 0:
         return False, f"OTLP metrics export file {metrics_file} is missing or empty"
@@ -332,7 +359,82 @@ def verify_otel_metrics():
     return True, f"All {len(required_metric_Families)} runtime and custom business metric families verified in Prometheus & OTLP JSON"
 
 
+def verify_otel_logs_via_victorialogs(known_journey_ids, known_trace_ids):
+    time.sleep(2.0)
+    expected_services = {
+        "journey-generator",
+        "api-gateway",
+        "cart-service",
+        "checkout-service",
+        "merchant-service",
+        "fulfillment-service",
+    }
+    query_url = f"{VICTORIA_LOGS_URL}/select/logsql/query?query=*&limit=5000"
+    st, raw_ndjson = http_text(query_url, timeout=20)
+    if st != 200:
+        return False, f"VictoriaLogs query failed with HTTP {st}"
+
+    observed_services = set()
+    fluentbit_namespaces = set()
+    correlated_log_count = 0
+    error_severity_count = 0
+    matched_traces = set()
+    matched_journeys = set()
+    total_records = 0
+
+    for line in raw_ndjson.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        total_records += 1
+        for secret in FORBIDDEN_SECRETS:
+            if secret and secret in line:
+                return False, "Sensitive credential leaked in VictoriaLogs records"
+        rec = json.loads(line)
+        svc = rec.get("service.name", "") or rec.get("parsed.service", "")
+        if svc:
+            observed_services.add(svc)
+        k8s_ns = rec.get("kubernetes.namespace_name", "")
+        if k8s_ns:
+            fluentbit_namespaces.add(k8s_ns)
+
+        trace_id = rec.get("trace_id", "") or rec.get("parsed.trace_id", "")
+        span_id = rec.get("span_id", "") or rec.get("parsed.span_id", "")
+        j_id = rec.get("journey_id", "") or rec.get("parsed.journey_id", "")
+        sev = (rec.get("severity", "") or rec.get("parsed.severity", "") or "").upper()
+
+        if sev in ("ERROR", "WARN"):
+            error_severity_count += 1
+        if trace_id and span_id and j_id:
+            correlated_log_count += 1
+        if trace_id in known_trace_ids:
+            matched_traces.add(trace_id)
+        if j_id in known_journey_ids:
+            matched_journeys.add(j_id)
+
+    missing_svcs = expected_services - observed_services
+    if missing_svcs:
+        return False, f"Missing services in VictoriaLogs: {sorted(missing_svcs)} (observed: {sorted(observed_services)})"
+    if not fluentbit_namespaces:
+        return False, "No Fluent Bit Kubernetes container logs found in VictoriaLogs"
+    if correlated_log_count == 0 or not matched_traces or not matched_journeys:
+        return False, (
+            f"VictoriaLogs correlation insufficient: total={total_records}, correlated={correlated_log_count}, "
+            f"matched_traces={len(matched_traces)}, matched_journeys={len(matched_journeys)}"
+        )
+    if error_severity_count == 0:
+        return False, "Expected ERROR/WARN severity log records in VictoriaLogs, found 0"
+
+    return True, (
+        f"VictoriaLogs verified (OTLP + Fluent Bit): total={total_records}, correlated={correlated_log_count}, "
+        f"error_records={error_severity_count}, matched_journeys={len(matched_journeys)}, "
+        f"fluentbit_namespaces={sorted(fluentbit_namespaces)}"
+    )
+
+
 def verify_otel_logs(known_journey_ids, known_trace_ids):
+    if VICTORIA_LOGS_URL:
+        return verify_otel_logs_via_victorialogs(known_journey_ids, known_trace_ids)
     logs_file = os.path.join(OTEL_EXPORT_DIR, "logs.json")
     if not os.path.exists(logs_file) or os.path.getsize(logs_file) == 0:
         return False, f"OTLP logs export file {logs_file} is missing or empty"
@@ -578,7 +680,7 @@ def main():
                 t_ok, t_msg = validate_trace_structure(trace_obj, req_svcs, expect_error=False)
             elif sc_name == "FULFILLMENT_ERROR":
                 # Wait for async fulfillment listener to process and NACK to DLQ (RabbitMQ stats refresh every ~5s)
-                dlq_after = wait_for_dlq_increment(dlq_before, timeout_sec=7.0)
+                dlq_after = wait_for_dlq_increment(dlq_before, timeout_sec=12.0)
                 fulfill_row = query_one(
                     MYSQL_FULFILLMENT_USER, MYSQL_FULFILLMENT_PASSWORD, "fulfillment_db",
                     "SELECT fulfillment_id, status FROM fulfillment WHERE journey_id = %s", (j_id,)

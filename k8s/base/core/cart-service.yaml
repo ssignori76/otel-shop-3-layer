@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cart-service
+  namespace: commerce-core
+  labels:
+    app.kubernetes.io/name: cart-service
+    app.kubernetes.io/part-of: commerce-synthetic
+spec:
+  selector:
+    app.kubernetes.io/name: cart-service
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-service
+  namespace: commerce-core
+  labels:
+    app.kubernetes.io/name: cart-service
+    app.kubernetes.io/part-of: commerce-synthetic
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cart-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cart-service
+        app.kubernetes.io/part-of: commerce-synthetic
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cart-service
+          image: commerce/cart-service:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8081
+          env:
+            - name: SERVER_PORT
+              value: "8081"
+            - name: OTEL_SERVICE_NAME
+              value: cart-service
+            - name: MYSQL_CART_USER
+              valueFrom:
+                secretKeyRef:
+                  name: commerce-core-secrets
+                  key: MYSQL_CART_USER
+            - name: MYSQL_CART_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: commerce-core-secrets
+                  key: MYSQL_CART_PASSWORD
+          envFrom:
+            - configMapRef:
+                name: commerce-core-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8081
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8081
+            periodSeconds: 10
+            timeoutSeconds: 3

@@ -1,0 +1,81 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: commerce-e2e-test-runner
+  namespace: commerce-observability
+  labels:
+    app.kubernetes.io/name: test-runner
+    app.kubernetes.io/part-of: commerce-synthetic
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: test-runner
+        app.kubernetes.io/part-of: commerce-synthetic
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: test-runner
+          image: commerce/test-runner:1.0.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: APACHE_URL
+              value: http://apache-web.commerce-edge.svc.cluster.local:80
+            - name: GATEWAY_URL
+              value: http://api-gateway.commerce-edge.svc.cluster.local:8080
+            - name: GENERATOR_URL
+              value: http://journey-generator.commerce-edge.svc.cluster.local:8085
+            - name: JAEGER_URL
+              value: http://jaeger.commerce-observability.svc.cluster.local:16686
+            - name: OTEL_PROMETHEUS_URL
+              value: http://otel-collector.commerce-observability.svc.cluster.local:8889/metrics
+            - name: VICTORIA_METRICS_URL
+              value: http://victoria-metrics.commerce-observability.svc.cluster.local:8428
+            - name: VICTORIA_LOGS_URL
+              value: http://victoria-logs.commerce-observability.svc.cluster.local:9428
+            - name: MYSQL_HOST
+              value: mysql.commerce-data.svc.cluster.local
+            - name: MYSQL_PORT
+              value: "3306"
+            - name: MYSQL_CART_USER
+              value: cart_app
+            - name: MYSQL_CART_PASSWORD
+              value: cart_local_dev_only
+            - name: MYSQL_CHECKOUT_USER
+              value: checkout_app
+            - name: MYSQL_CHECKOUT_PASSWORD
+              value: checkout_local_dev_only
+            - name: MYSQL_FULFILLMENT_USER
+              value: fulfillment_app
+            - name: MYSQL_FULFILLMENT_PASSWORD
+              value: fulfillment_local_dev_only
+            - name: RABBITMQ_API_URL
+              value: http://rabbitmq.commerce-data.svc.cluster.local:15672/api
+            - name: RABBITMQ_USER
+              value: commerce_app
+            - name: RABBITMQ_PASSWORD
+              value: rabbit_local_dev_only
+            - name: REPORT_DIR
+              value: /tmp/reports
+            - name: NORMAL_STABILITY_COUNT
+              value: "30"
+            - name: SCENARIO_REPEAT_COUNT
+              value: "3"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: commerce-edge-config
+  namespace: commerce-edge
+  labels:
+    app.kubernetes.io/part-of: commerce-synthetic
+data:
+  CART_SERVICE_URL: http://cart-service.commerce-core.svc.cluster.local:8081
+  CHECKOUT_SERVICE_URL: http://checkout-service.commerce-core.svc.cluster.local:8082
+  GENERATOR_TARGET_URL: http://apache-web.commerce-edge.svc.cluster.local:80
+  GENERATOR_ENABLED: "true"
+  GENERATOR_INTERVAL_SECONDS: "10"
+  GENERATOR_INITIAL_DELAY_SECONDS: "5"
+  GENERATOR_MAX_IN_FLIGHT: "1"
+  GENERATOR_REQUEST_TIMEOUT_SECONDS: "30"
+  GENERATOR_MAX_JOURNEYS: "0"
+  GENERATOR_STOP_ON_UNEXPECTED_ERROR: "false"
+  SCENARIO_NAME: NORMAL
+  SCENARIO_ENABLED: "false"
+  OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=kubernetes,service.version=1.0.0
+  OTEL_PROPAGATORS: tracecontext,baggage
+  OTEL_TRACES_SAMPLER: always_on
+  OTEL_TRACES_EXPORTER: none
+  OTEL_METRICS_EXPORTER: none
+  OTEL_LOGS_EXPORTER: none

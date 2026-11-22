@@ -188,8 +188,32 @@ The host requires **only Docker Engine, Docker Compose, and Git**. No local JDK 
 | `make down` | Stop and remove all containers and ephemeral volumes |
 | `make clean` | Tear down stack and clean generated test reports |
 | `make publish` | Push verified images to container registry (requires passing `test/reports/e2e-test-report.json`) |
+| `make k8s-up` | Create `kind` cluster, load local images, and deploy `k8s/overlays/local-observability` |
+| `make k8s-up-dynatrace` | Deploy `k8s/overlays/dynatrace-ready` (only 3 app namespaces, no local observability) |
+| `make k8s-test` | Validate `dynatrace-ready` overlay + run full E2E verification Job on `kind` (Gates 3–12) |
+| `make k8s-down` | Delete the `kind` cluster `commerce-synthetic` |
+| `make k8s-render-dynatrace` | Render `k8s/overlays/dynatrace-ready` manifests via `kubectl kustomize` |
 
-### Dynatrace OTLP Mode
+### Kubernetes (`kind`) Multi-Namespace Deployment
+
+The repository includes a Kustomize-based Kubernetes deployment under [`k8s/`](k8s/) organized into 3 application namespaces plus an optional observability namespace:
+
+| Namespace | Role | Deployed Workloads |
+|---|---|---|
+| `commerce-edge` | FE / Edge Tier | `apache-web` (NodePort `30080` → host `18080`), `api-gateway`, `journey-generator` |
+| `commerce-core` | BE / Business Microservices | `cart-service`, `checkout-service`, `merchant-service`, `fulfillment-service` |
+| `commerce-data` | DB & Messaging Tier | `mysql` (`StatefulSet`), `rabbitmq` (`StatefulSet`) |
+| `commerce-observability` | Local Observability *(only `local-observability` overlay)* | `otel-collector`, `jaeger` (`:16686`), `victoria-metrics` (`:18428/vmui`), `victoria-logs` (`:19428/select/vmui`), `fluent-bit` (`DaemonSet`) |
+
+Two Kustomize overlays are provided:
+- **`k8s/overlays/local-observability`**: Deploys all 4 namespaces with Jaeger (Traces), VictoriaMetrics (Metrics), VictoriaLogs + Fluent Bit (OTLP + container stdout Logs), and OpenTelemetry Collector.
+  - Entry Point: `http://localhost:18080/healthz`
+  - Jaeger UI: `http://localhost:16686`
+  - VictoriaMetrics UI: `http://localhost:18428/vmui`
+  - VictoriaLogs UI: `http://localhost:19428/select/vmui`
+- **`k8s/overlays/dynatrace-ready`**: Deploys **only** `commerce-edge`, `commerce-core`, and `commerce-data` (zero local observability pods) and disables the bundled OTel Java Agent (`JAVA_TOOL_OPTIONS=""`) so Dynatrace Operator / OneAgent can instrument the cluster without double-agent conflicts.
+
+### Dynatrace OTLP Mode (Docker Compose)
 
 To run with Dynatrace OTLP export (`traces`, `metrics` with `cumulativetodelta`, and `logs`):
 

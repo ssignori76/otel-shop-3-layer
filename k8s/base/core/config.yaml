@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: commerce-core-config
+  namespace: commerce-core
+  labels:
+    app.kubernetes.io/part-of: commerce-synthetic
+data:
+  CART_DB_URL: jdbc:mysql://mysql.commerce-data.svc.cluster.local:3306/cart_db?serverTimezone=UTC&characterEncoding=utf8
+  CHECKOUT_DB_URL: jdbc:mysql://mysql.commerce-data.svc.cluster.local:3306/checkout_db?serverTimezone=UTC&characterEncoding=utf8
+  FULFILLMENT_DB_URL: jdbc:mysql://mysql.commerce-data.svc.cluster.local:3306/fulfillment_db?serverTimezone=UTC&characterEncoding=utf8
+  RABBITMQ_HOST: rabbitmq.commerce-data.svc.cluster.local
+  RABBITMQ_PORT: "5672"
+  MERCHANT_SERVICE_URL: http://merchant-service.commerce-core.svc.cluster.local:8083
+  SCENARIO_NAME: NORMAL
+  SCENARIO_ENABLED: "false"
+  DB_SLOW_DURATION_MS: "1500"
+  DB_OPERATION_TIMEOUT_MS: "1000"
+  MERCHANT_TIMEOUT_MS: "1500"
+  BROKER_PUBLISH_TIMEOUT_MS: "1500"
+  FULFILLMENT_ERROR_AFTER_MS: "100"
+  OTEL_RESOURCE_ATTRIBUTES: service.namespace=commerce-synthetic,deployment.environment.name=kubernetes,service.version=1.0.0
+  OTEL_PROPAGATORS: tracecontext,baggage
+  OTEL_TRACES_SAMPLER: always_on
+  OTEL_TRACES_EXPORTER: none
+  OTEL_METRICS_EXPORTER: none
+  OTEL_LOGS_EXPORTER: none
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: commerce-core-secrets
+  namespace: commerce-core
+  labels:
+    app.kubernetes.io/part-of: commerce-synthetic
+type: Opaque
+stringData:
+  MYSQL_CART_USER: cart_app
+  MYSQL_CART_PASSWORD: cart_local_dev_only
+  MYSQL_CHECKOUT_USER: checkout_app
+  MYSQL_CHECKOUT_PASSWORD: checkout_local_dev_only
+  MYSQL_FULFILLMENT_USER: fulfillment_app
+  MYSQL_FULFILLMENT_PASSWORD: fulfillment_local_dev_only
+  RABBITMQ_USER: commerce_app
+  RABBITMQ_PASSWORD: rabbit_local_dev_only
